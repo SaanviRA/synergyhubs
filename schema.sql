@@ -1,0 +1,187 @@
+-- Drop tables if they exist to start fresh
+DROP TABLE IF EXISTS evaluation_logs CASCADE;
+DROP TABLE IF EXISTS workspaces CASCADE;
+DROP TABLE IF EXISTS resources CASCADE;
+DROP TABLE IF EXISTS milestones CASCADE;
+DROP TABLE IF EXISTS project_members CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS class_members CASCADE;
+DROP TABLE IF EXISTS classes CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+-- 1. USERS Table
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    avatar VARCHAR(10) NOT NULL,
+    password_hash VARCHAR(255) DEFAULT NULL,
+    google_id VARCHAR(255) UNIQUE DEFAULT NULL,
+    avatar_url TEXT DEFAULT NULL,
+    is_me BOOLEAN DEFAULT FALSE,
+    role VARCHAR(50) DEFAULT 'student' CHECK (role IN ('student', 'teacher')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. CLASSES Table
+CREATE TABLE classes (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    teacher VARCHAR(100) NOT NULL,
+    join_code VARCHAR(20) UNIQUE,
+    color VARCHAR(100) NOT NULL DEFAULT 'from-blue-500 to-indigo-600',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. CLASS_MEMBERS Table (Many-to-Many join table)
+CREATE TABLE class_members (
+    class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(50) DEFAULT 'student' CHECK (role IN ('student', 'teacher')),
+    PRIMARY KEY (class_id, user_id)
+);
+
+-- 4. PROJECTS Table
+CREATE TABLE projects (
+    id SERIAL PRIMARY KEY,
+    class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'present' CHECK (status IN ('past', 'present', 'future')),
+    progress INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+    color VARCHAR(100) NOT NULL,
+    hue VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. PROJECT_MEMBERS Table (Many-to-Many join table with roles and updates)
+CREATE TABLE project_members (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    roles TEXT[] DEFAULT '{}',
+    active_log TEXT,
+    PRIMARY KEY (project_id, user_id)
+);
+
+-- 6. MILESTONES Table
+CREATE TABLE milestones (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    details TEXT,
+    due_date VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in-progress', 'completed', 'delayed')),
+    assigned_to VARCHAR(100) DEFAULT 'Everyone',
+    assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    submission_file_name VARCHAR(255),
+    submission_submitted_at VARCHAR(100),
+    submission_file_url TEXT
+);
+
+-- 7. RESOURCES Table
+CREATE TABLE resources (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('doc', 'document', 'link', 'website', 'image', 'video', 'article')),
+    url TEXT,
+    uploader VARCHAR(100) NOT NULL,
+    uploader_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    date VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. WORKSPACES Table
+CREATE TABLE workspaces (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('figma', 'drive', 'miro', 'github', 'other')),
+    url TEXT,
+    creator VARCHAR(100) NOT NULL,
+    creator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    date VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. EVALUATION_LOGS Table
+CREATE TABLE evaluation_logs (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+    log_text TEXT NOT NULL,
+    date VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- -------------------------------------------------------------
+-- MOCK DATA SEEDING
+-- -------------------------------------------------------------
+
+-- Seed users
+INSERT INTO users (id, name, email, avatar, password_hash, is_me, role) VALUES
+(1, 'Alex M.', 'alex@school.edu', 'AM', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', FALSE, 'student'),
+(2, 'Sarah K.', 'sarah@school.edu', 'SK', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', FALSE, 'student'),
+(3, 'You', 'saanvi@school.edu', 'JD', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', TRUE, 'student'),
+(4, 'Mr. Davis', 'davis@school.edu', 'MD', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', FALSE, 'teacher'),
+(5, 'Mrs. Smith', 'smith@school.edu', 'MS', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', FALSE, 'teacher');
+
+SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
+
+-- Seed classes
+INSERT INTO classes (id, name, teacher, join_code, color) VALUES
+(1, 'AP US History', 'Mr. Davis', '8XYZ-2PLQ', 'from-blue-500 to-indigo-600'),
+(2, 'Biology 101', 'Mrs. Smith', '4ABC-7XYZ', 'from-emerald-400 to-teal-500');
+
+SELECT setval('classes_id_seq', (SELECT MAX(id) FROM classes));
+
+-- Seed class membership
+INSERT INTO class_members (class_id, user_id, role) VALUES
+(1, 1, 'student'),
+(1, 2, 'student'),
+(1, 3, 'student'),
+(1, 4, 'teacher'),
+(2, 1, 'student'),
+(2, 2, 'student'),
+(2, 3, 'student'),
+(2, 5, 'teacher');
+
+-- Seed projects
+INSERT INTO projects (id, class_id, name, status, progress, color, hue) VALUES
+(101, 1, 'Cold War Perspectives', 'present', 65, 'from-blue-500 to-indigo-600', 'blue'),
+(102, 1, 'Industrial Revolution', 'past', 100, 'from-gray-500 to-gray-600', 'gray'),
+(103, 1, 'Civil Rights Movement', 'future', 0, 'from-amber-400 to-amber-600', 'amber'),
+(201, 2, 'Ecosystem Simulation', 'present', 20, 'from-emerald-400 to-teal-500', 'emerald'),
+(202, 2, 'Cellular Mitosis Lab', 'past', 100, 'from-gray-500 to-gray-600', 'gray');
+
+SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects));
+
+-- Seed project members for Project 101
+INSERT INTO project_members (project_id, user_id, roles, active_log) VALUES
+(101, 1, ARRAY['Researcher'], 'Found 3 primary sources on JFK.'),
+(101, 2, ARRAY['Editor'], 'Reviewed Alex''s sources, drafted outline.'),
+(101, 3, ARRAY['Presenter'], 'Created slide deck template.');
+
+-- Seed milestones for Project 101
+INSERT INTO milestones (id, project_id, title, details, due_date, status, assigned_to, assigned_user_id, submission_file_name, submission_submitted_at) VALUES
+(1, 101, 'Topic Selection & Approval', 'Decide on the Cold War era and get Mr. Davis to approve it.', 'Mar 11', 'completed', 'Everyone', NULL, 'Topic_Proposal_SpaceRace.pdf', 'Mar 11, 4:30 PM'),
+(2, 101, 'Gather Primary Sources', 'Find at least 5 primary sources from the 1960s regarding the Space Race.', 'Mar 18 (Today)', 'in-progress', 'Alex M.', 1, NULL, NULL),
+(3, 101, 'Draft Introduction', 'Write the first 2 pages of the introduction establishing context.', 'Mar 21', 'delayed', 'Sarah K.', 2, NULL, NULL),
+(4, 101, 'Create Presentation Slides', 'Design the slide deck using the NextHub template.', 'Mar 25', 'pending', 'You', 3, NULL, NULL);
+
+SELECT setval('milestones_id_seq', (SELECT MAX(id) FROM milestones));
+
+-- Seed resources for Project 101
+INSERT INTO resources (id, project_id, title, type, url, uploader, uploader_id, date) VALUES
+(1, 101, 'Project Rubric', 'doc', '#', 'Mr. Davis', 4, 'Mar 10'),
+(2, 101, 'JFK Speech Transcript', 'link', 'https://www.jfklibrary.org/', 'Alex M.', 1, 'Mar 11'),
+(3, 101, 'Cold War Political Cartoons', 'image', '#', 'Sarah K.', 2, 'Mar 14'),
+(4, 101, 'Draft Outline v1', 'doc', '#', 'You', 3, 'Mar 18');
+
+SELECT setval('resources_id_seq', (SELECT MAX(id) FROM resources));
+
+-- Seed evaluation logs for Project 101 (for user 3, 'You')
+INSERT INTO evaluation_logs (id, project_id, user_id, log_text, date) VALUES
+(1, 101, 3, 'Researched presentation tools and settled on NextHub flow.', 'Mar 14'),
+(2, 101, 3, 'Attended group meeting, decided on the Cold War topic.', 'Mar 11');
+
+SELECT setval('evaluation_logs_id_seq', (SELECT MAX(id) FROM evaluation_logs));
