@@ -282,6 +282,7 @@ app.get('/api/classes', async (req, res) => {
         id: cls.id,
         name: cls.name,
         teacher: cls.teacher,
+        joinCode: cls.join_code,
         color: cls.color,
         members: memberCounts[cls.id] || 0,
         projects: classProjects

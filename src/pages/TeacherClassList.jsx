@@ -95,7 +95,13 @@ export default function TeacherClassList({ onSelectClass }) {
             {/* Bottom details area */}
             <div className="p-5 space-y-4 relative">
               <div className="flex justify-between items-center text-sm font-medium">
-                 <span className="text-surface-600">Instructor: {cls.teacher}</span>
+                 <span className="text-surface-600 flex items-center gap-1.5">
+                   Instructor: {cls.teacher} 
+                   <span className="text-surface-300">•</span>
+                   <span className="font-mono text-brand-600 font-bold text-xs bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 uppercase tracking-wide">
+                     {cls.joinCode}
+                   </span>
+                 </span>
                 <div className="flex items-center gap-1.5 text-surface-500 bg-surface-50 px-2 py-1 rounded-md">
                    <Users size={14} />
                   <span>{cls.members} Members</span>
