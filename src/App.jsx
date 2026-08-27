@@ -98,6 +98,7 @@ function App() {
             classData={selectedClass} 
             onSelectProject={(proj) => setSelectedProject(proj)} 
             onBack={() => setSelectedClass(null)} 
+            onUpdateClass={(updatedClass) => setSelectedClass(updatedClass)}
           />
         );
       }

@@ -143,12 +143,44 @@ DB_NAME=group_app_db
 DB_USER=pguser
 DB_PASSWORD=pgpassword
 
-# Port for Express Backend
-PORT=5001
-
-# API URL for Frontend requests (leave empty to use relative routes under Nginx proxy)
-VITE_API_URL=""
+# API URL for Frontend requests (Do not leave empty, as code will fallback to http://localhost:5001)
+# Use your domain (e.g., https://yourdomain.com) or server IP (e.g., http://203.0.113.1)
+VITE_API_URL="https://yourdomain.com"
 ```
+
+> **IMPORTANT**: In Vite, environment variables starting with `VITE_` are injected into the static files at **build time**. If you edit your `.env` file, you **must rebuild the frontend** using `npm run build` for the changes to take effect on the client side.
+
+
+---
+
+## Step 6b: Google OAuth 2.0 Compliance & Setup (Avoid Blocks)
+
+To comply with Google's OAuth 2.0 security policies and prevent users from encountering "Access Blocked" or "Error 400" screens, complete the following setup in the [Google Cloud Console](https://console.cloud.google.com/):
+
+### 1. Register a Custom OAuth Client ID
+Do not use a shared or default Client ID in production. Register your own unique client ID:
+- Navigate to **APIs & Services** > **Credentials**.
+- Click **+ Create Credentials** > **OAuth client ID**.
+- Select **Web application** as the application type.
+- Add a Name (e.g., `Group Collaboration App`).
+
+### 2. Configure Authorized Origins (Strict Google Policies)
+Google enforces strict security policies on Web client IDs. Failure to comply with these will block authentication requests:
+- **Authorized JavaScript origins**:
+  - Add your domain: `https://yourdomain.com` (Must be HTTPS).
+  - Add localhost for local development: `http://localhost:5173` (Vite) and `http://localhost:5001` (Express).
+  - **CRITICAL**: Google **does not allow** bare IP addresses (e.g., `http://192.168.1.15` or `http://203.0.113.1`) as authorized origins. You **must** map a domain name to your server and use HTTPS in production.
+- **Authorized redirect URIs**:
+  - For Google Identity Services (One Tap/Sign-In buttons), the Authorized JavaScript Origin is generally sufficient, but if you define redirect endpoints, they must match exactly.
+
+### 3. Configure the OAuth Consent Screen
+- Go to **APIs & Services** > **OAuth consent screen**.
+- **User Type**: Select **External** (to allow any Google account) or **Internal** (if deploying strictly within a school/organization's domain).
+- **Publishing Status**: 
+  - If status is **Testing**, only accounts explicitly added under **Test users** on this page will be allowed to sign in. Any other Google account will get blocked with an `access_denied` error.
+  - To allow general logins, click **Publish App** to change the status to **In Production**.
+- **Scopes**:
+  - Since this app integrates Google Drive (via the Picker API), it uses sensitive scopes to access user files. If your app is "In Production" but unverified by Google, users will see an "Unverified App" warning. You can bypass this warning during testing (by clicking "Advanced" > "Go to [app name] (unsafe)"). To remove this warning for all users, you must submit your app for Google verification from the Consent Screen dashboard.
 
 ---
 

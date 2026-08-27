@@ -406,6 +406,87 @@ app.post('/api/classes', async (req, res) => {
   }
 });
 
+// Create a new project under a class (Teacher only)
+app.post('/api/classes/:classId/projects', async (req, res) => {
+  const { classId } = req.params;
+  const { name, status, color, hue, timeline } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+  if (!status || !['present', 'past', 'future'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid project status' });
+  }
+  if (!color || !hue) {
+    return res.status(400).json({ error: 'Color and hue are required' });
+  }
+
+  try {
+    // 1. Verify user is a teacher and member of the class
+    const memberQuery = await pool.query(
+      'SELECT role FROM class_members WHERE class_id = $1 AND user_id = $2',
+      [classId, req.userId]
+    );
+    if (memberQuery.rows.length === 0) {
+      return res.status(403).json({ error: 'You are not a member of this class' });
+    }
+    if (memberQuery.rows[0].role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can create projects' });
+    }
+
+    // 2. Perform database insertion within a transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Insert Project
+      const projectInsert = await client.query(
+        `INSERT INTO projects (class_id, name, status, progress, color, hue)
+         VALUES ($1, $2, $3, 0, $4, $5)
+         RETURNING id, name, status, progress, color, hue`,
+        [classId, name.trim(), status, color, hue]
+      );
+      const newProject = projectInsert.rows[0];
+
+      // Insert milestones/timeline if provided
+      if (Array.isArray(timeline) && timeline.length > 0) {
+        for (const milestone of timeline) {
+          if (milestone.title && milestone.title.trim()) {
+            await client.query(
+              `INSERT INTO milestones (project_id, title, details, due_date, status, assigned_to)
+               VALUES ($1, $2, $3, $4, 'pending', 'Everyone')`,
+              [newProject.id, milestone.title.trim(), milestone.details ? milestone.details.trim() : null, milestone.date || 'TBD']
+            );
+          }
+        }
+      }
+
+      // Automatically assign all student members of this class to this new project
+      const studentsQuery = await client.query(
+        "SELECT user_id FROM class_members WHERE class_id = $1 AND role = 'student'",
+        [classId]
+      );
+      for (const student of studentsQuery.rows) {
+        await client.query(
+          `INSERT INTO project_members (project_id, user_id, roles, active_log)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [newProject.id, student.user_id, ['Collaborator'], 'Just joined the project!']
+        );
+      }
+
+      await client.query('COMMIT');
+      res.status(201).json(newProject);
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error creating project:', err);
+    res.status(500).json({ error: 'Server error creating project' });
+  }
+});
 // -------------------------------------------------------------
 // TEAM HUB ENDPOINTS
 // -------------------------------------------------------------
