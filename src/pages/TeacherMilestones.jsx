@@ -203,19 +203,14 @@ export default function TeacherMilestones({ classData, projectData, onBack }) {
                     <h3 className="text-lg font-bold text-surface-900 mb-1 leading-tight">{ms.title}</h3>
                     <p className="text-surface-600 text-sm mb-4 leading-relaxed">{ms.details}</p>
                     
-                    <div className={`flex items-center gap-2 ${isLeft ? 'sm:justify-end' : ''}`}>
-                      <div className="h-6 w-6 rounded-full bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center text-[10px] font-bold text-indigo-700 shadow-sm border border-brand-50">
-                        {ms.assignee.charAt(0)}
-                      </div>
-                      <span className="text-xs font-semibold text-surface-600">{ms.assignee}</span>
-                      
-                      {ms.submission && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded ml-2">
+                    {ms.submission && (
+                      <div className={`flex items-center gap-2 ${isLeft ? 'sm:justify-end' : ''}`}>
+                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
                           <CheckCircle2 size={12} />
                           Submitted
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Expandable Submission Area */}
                     <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0'} pt-0`}>

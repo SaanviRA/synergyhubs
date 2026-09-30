@@ -114,7 +114,14 @@ function App() {
     if (isTeacher) {
       switch (activeTab) {
         case 'Dashboard':
-          return <TeacherDashboard classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+          return (
+            <TeacherDashboard 
+              classData={selectedClass} 
+              projectData={selectedProject} 
+              onBack={() => setSelectedProject(null)} 
+              onNavigate={setActiveTab}
+            />
+          );
         case 'Timeline':
           return <TeacherMilestones classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
         case 'Resources':
@@ -124,13 +131,27 @@ function App() {
         case 'Team':
           return <TeacherTeam classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
         default:
-          return <TeacherDashboard classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+          return (
+            <TeacherDashboard 
+              classData={selectedClass} 
+              projectData={selectedProject} 
+              onBack={() => setSelectedProject(null)} 
+              onNavigate={setActiveTab}
+            />
+          );
       }
     }
 
     switch (activeTab) {
       case 'Dashboard':
-        return <Dashboard classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+        return (
+          <Dashboard 
+            classData={selectedClass} 
+            projectData={selectedProject} 
+            onBack={() => setSelectedProject(null)} 
+            onNavigate={setActiveTab}
+          />
+        );
       case 'Timeline':
         return <Milestones classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
       case 'Resources':
@@ -140,7 +161,14 @@ function App() {
       case 'Team':
         return <Team classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
       default:
-        return <Dashboard classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+        return (
+          <Dashboard 
+            classData={selectedClass} 
+            projectData={selectedProject} 
+            onBack={() => setSelectedProject(null)} 
+            onNavigate={setActiveTab}
+          />
+        );
     }
   };
 

@@ -497,7 +497,7 @@ app.get('/api/projects/:projectId/team', async (req, res) => {
   const { projectId } = req.params;
   try {
     const teamResult = await pool.query(
-      `SELECT u.id, u.name, u.email, u.avatar, u.is_me, pm.roles, pm.active_log as "activeLog"
+      `SELECT u.id, u.name, u.email, u.avatar, u.is_me, u.is_me as "isMe", pm.roles, pm.active_log as "activeLog"
        FROM project_members pm
        JOIN users u ON pm.user_id = u.id
        WHERE pm.project_id = $1
