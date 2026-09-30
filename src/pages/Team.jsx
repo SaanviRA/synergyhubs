@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, ShieldCheck, PenTool, MessageSquare, Plus, Activity, ArrowLeft, MailPlus, X, Trash2 } from 'lucide-react';
 
-export default function Team({ classData, projectData, onBack }) {
+export default function Team({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);

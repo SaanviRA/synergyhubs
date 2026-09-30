@@ -2,10 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, CheckCircle2, Clock, AlertCircle, Sparkles, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2 } from 'lucide-react';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
 
-export default function Milestones({ classData, projectData, onBack }) {
+export default function Milestones({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [showAiPrompt, setShowAiPrompt] = useState(false);
   const [aiText, setAiText] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+  const [showManualSubmitModal, setShowManualSubmitModal] = useState(false);
+  const [manualFileName, setManualFileName] = useState('');
+  const [manualFileUrl, setManualFileUrl] = useState('');
+  const [targetMilestoneId, setTargetMilestoneId] = useState(null);
   
   const [milestones, setMilestones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,25 +26,78 @@ export default function Milestones({ classData, projectData, onBack }) {
       if (res.ok) {
         const data = await res.json();
         setMilestones(data);
+        const completed = data.filter(m => m.status === 'completed').length;
+        if (data.length > 0 && onUpdateProject) {
+          onUpdateProject({ progress: Math.round((completed / data.length) * 100) });
+        }
       }
     } catch (err) {
       console.error('Error fetching milestones:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [projectData?.id]);
+  }, [projectData?.id, onUpdateProject]);
 
   useEffect(() => {
     fetchMilestones();
   }, [fetchMilestones]);
 
+  const handleUpdateStatus = async (milestoneId, newStatus, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/milestones/${milestoneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMilestones(prev => prev.map(m => m.id === milestoneId ? { ...m, status: newStatus } : m));
+        if (data.progress !== undefined && onUpdateProject) {
+          onUpdateProject({ progress: data.progress });
+        }
+      }
+    } catch (err) {
+      console.error('Error updating milestone status:', err);
+    }
+  };
+
   const handleOpenDrivePicker = (milestoneId) => {
     if (!creds.clientId || !creds.appId || !creds.developerKey) {
-      alert('Google Drive integration is not configured. Please define VITE_GOOGLE_CLIENT_ID, VITE_GOOGLE_APP_ID, and VITE_GOOGLE_API_KEY in your .env file.');
+      // Fallback to manual submission dialog if Drive credentials are not set
+      setTargetMilestoneId(milestoneId);
+      setShowManualSubmitModal(true);
       return;
     }
     setSubmittingMilestoneId(milestoneId);
     setIsPickerActive(true);
+  };
+
+  const handleManualSubmit = async () => {
+    if (!manualFileName.trim() || !targetMilestoneId) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/milestones/${targetMilestoneId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          fileName: manualFileName.trim(),
+          fileUrl: manualFileUrl.trim() || '#'
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchMilestones();
+        if (data.progress !== undefined && onUpdateProject) {
+          onUpdateProject({ progress: data.progress });
+        }
+        setShowManualSubmitModal(false);
+        setManualFileName('');
+        setManualFileUrl('');
+        setTargetMilestoneId(null);
+      }
+    } catch (err) {
+      console.error('Error submitting file:', err);
+    }
   };
 
   useEffect(() => {
@@ -69,7 +126,11 @@ export default function Milestones({ classData, projectData, onBack }) {
             })
           });
           if (res.ok) {
+            const data = await res.json();
             await fetchMilestones();
+            if (data.progress !== undefined && onUpdateProject) {
+              onUpdateProject({ progress: data.progress });
+            }
           }
         } catch (err) {
           console.error('Error submitting picked document:', err);
@@ -92,7 +153,7 @@ export default function Milestones({ classData, projectData, onBack }) {
       node.removeEventListener('picker:picked', handlePicked);
       node.removeEventListener('picker:canceled', handleCanceled);
     };
-  }, [isPickerActive, submittingMilestoneId, projectData?.id, fetchMilestones]);
+  }, [isPickerActive, submittingMilestoneId, projectData?.id, fetchMilestones, onUpdateProject]);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -192,6 +253,7 @@ export default function Milestones({ classData, projectData, onBack }) {
                   >
                     <div className={`flex items-center gap-2 mb-2 ${isLeft ? 'sm:flex-row-reverse' : ''}`}>
                       <span className="text-sm font-semibold text-brand-600 px-2.5 py-1 bg-brand-50 rounded-lg">{ms.date}</span>
+                      <span className="text-xs font-medium text-surface-500 bg-surface-100 px-2 py-0.5 rounded-md">Team Milestone</span>
                       <div className="flex-1" />
                       <div className="h-7 w-7 rounded-full bg-surface-100 flex items-center justify-center text-surface-500 group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors">
                         <ChevronDown size={18} className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -214,6 +276,47 @@ export default function Milestones({ classData, projectData, onBack }) {
                     <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0'} pt-0`}>
                       <div className="overflow-hidden">
                         <div className={`pt-5 border-t border-surface-200/60 ${isLeft ? 'sm:text-right' : 'sm:text-left'} text-left`}>
+                          
+                          {/* Quick Status Toggles for Team */}
+                          <div className="mb-4 pb-4 border-b border-surface-200/60 flex items-center justify-between flex-wrap gap-2">
+                            <div>
+                              <p className="text-xs font-bold text-surface-600 uppercase tracking-wider">Milestone Status</p>
+                              <p className="text-[11px] text-surface-400">Shared progress across entire team</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-surface-100 p-1 rounded-xl">
+                              <button
+                                onClick={(e) => handleUpdateStatus(ms.id, 'pending', e)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                                  ms.status === 'pending'
+                                    ? 'bg-white text-surface-900 shadow-sm font-semibold'
+                                    : 'text-surface-600 hover:text-surface-900'
+                                }`}
+                              >
+                                Pending
+                              </button>
+                              <button
+                                onClick={(e) => handleUpdateStatus(ms.id, 'in-progress', e)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                                  ms.status === 'in-progress'
+                                    ? 'bg-brand-500 text-white shadow-sm font-semibold'
+                                    : 'text-surface-600 hover:text-surface-900'
+                                }`}
+                              >
+                                In Progress
+                              </button>
+                              <button
+                                onClick={(e) => handleUpdateStatus(ms.id, 'completed', e)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                                  ms.status === 'completed'
+                                    ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                                    : 'text-surface-600 hover:text-surface-900'
+                                }`}
+                              >
+                                Completed ✓
+                              </button>
+                            </div>
+                          </div>
+
                           {ms.submission ? (
                             <div className="space-y-4">
                               <div>
@@ -256,16 +359,29 @@ export default function Milestones({ classData, projectData, onBack }) {
                                   )}
                                 </div>
                               </div>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenDrivePicker(ms.id);
-                                }}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-sm text-surface-700 bg-white border border-surface-200 shadow-sm hover:bg-surface-50 hover:border-surface-300 transition-all active:scale-[0.98]"
-                              >
-                                <Upload size={16} className="text-surface-500" />
-                                Re-submit File
-                              </button>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDrivePicker(ms.id);
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl font-semibold text-xs text-surface-700 bg-white border border-surface-200 shadow-sm hover:bg-surface-50 transition-all cursor-pointer active:scale-98"
+                                >
+                                  <Upload size={14} className="text-surface-500" />
+                                  Re-submit File
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTargetMilestoneId(ms.id);
+                                    setShowManualSubmitModal(true);
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl font-semibold text-xs text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 transition-all cursor-pointer active:scale-98"
+                                >
+                                  <Link2 size={14} />
+                                  Attach Link / Doc
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div className="space-y-4 bg-brand-50/30 rounded-xl p-4 border border-brand-100 border-dashed">
@@ -274,18 +390,31 @@ export default function Milestones({ classData, projectData, onBack }) {
                                   <FileText size={18} />
                                 </div>
                                 <h4 className="text-surface-900 font-semibold text-sm mb-1">No submission yet</h4>
-                                <p className="text-surface-500 text-xs max-w-[200px]">Upload your work here so your team can review it.</p>
+                                <p className="text-surface-500 text-xs max-w-[200px]">Upload work or submit doc link for the entire group.</p>
                               </div>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenDrivePicker(ms.id);
-                                }}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 shadow-sm shadow-brand-500/20 transition-all active:scale-[0.98] focus:ring-2 focus:ring-brand-500/50 focus:outline-none"
-                              >
-                                <Upload size={16} />
-                                Submit Your Work
-                              </button>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDrivePicker(ms.id);
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl font-semibold text-xs text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 shadow-sm shadow-brand-500/20 transition-all cursor-pointer"
+                                >
+                                  <Upload size={14} />
+                                  Google Drive
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTargetMilestoneId(ms.id);
+                                    setShowManualSubmitModal(true);
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl font-semibold text-xs text-brand-700 bg-white border border-brand-200 hover:bg-brand-50 shadow-sm transition-all cursor-pointer"
+                                >
+                                  <Link2 size={14} />
+                                  Attach Link / Doc
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -298,6 +427,59 @@ export default function Milestones({ classData, projectData, onBack }) {
           })}
         </div>
       </div>
+
+      {/* Manual Submit Modal */}
+      {showManualSubmitModal && (
+        <div className="fixed inset-0 bg-surface-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-heading font-bold text-lg text-surface-900">Submit Milestone Work</h3>
+              <button 
+                onClick={() => setShowManualSubmitModal(false)}
+                className="text-surface-400 hover:text-surface-600 text-sm p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-surface-700 mb-1">Document / Submission Name</label>
+              <input 
+                type="text" 
+                value={manualFileName}
+                onChange={(e) => setManualFileName(e.target.value)}
+                placeholder="e.g. Cold_War_Perspectives_Paper.pdf"
+                className="w-full bg-surface-50 border border-surface-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-surface-700 mb-1">Resource Link / URL (Optional)</label>
+              <input 
+                type="url" 
+                value={manualFileUrl}
+                onChange={(e) => setManualFileUrl(e.target.value)}
+                placeholder="https://docs.google.com/document/..."
+                className="w-full bg-surface-50 border border-surface-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button 
+                onClick={() => setShowManualSubmitModal(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-surface-600 hover:bg-surface-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleManualSubmit}
+                disabled={!manualFileName.trim()}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 cursor-pointer shadow-sm shadow-brand-500/20"
+              >
+                Submit Work
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Google Drive Integration Elements */}
       {isPickerActive && creds.clientId && creds.appId && creds.developerKey && (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, ShieldCheck, PenTool, MessageSquare, Plus, Activity, ArrowLeft, MailPlus, X, Trash2 } from 'lucide-react';
 
-export default function TeacherTeam({ classData, projectData, onBack }) {
+export default function TeacherTeam({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -255,13 +255,26 @@ export default function TeacherTeam({ classData, projectData, onBack }) {
         
         <div className="p-5 sm:p-6 space-y-4">
           {pastLogs.map((log, i) => (
-            <div key={i} className="flex gap-4 group">
-              <div className="text-sm font-medium text-surface-400 w-16 pt-1 shrink-0">{log.date}</div>
+            <div key={i} className="flex gap-4 group items-start">
+              <div className="text-xs font-semibold text-surface-400 w-16 pt-1 shrink-0">{log.date}</div>
               <div className="bg-surface-50 border border-surface-200 rounded-xl p-4 pr-12 flex-1 text-surface-800 text-sm hover:shadow-sm transition-shadow relative">
-                {log.text}
+                {log.userName && (
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-surface-200/50">
+                    <div className="h-5 w-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
+                      {log.avatar || log.userName.charAt(0)}
+                    </div>
+                    <span className="text-xs font-bold text-indigo-900">{log.userName}</span>
+                    {log.type && (
+                      <span className="text-[10px] font-semibold text-surface-500 bg-surface-200/50 px-1.5 py-0.2 rounded capitalize">
+                        {log.type.replace('_', ' ')}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="text-surface-800 leading-relaxed">{log.text}</div>
                 <button
                   onClick={() => handleDeleteLog(log.id)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-surface-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                  className="absolute right-2 top-3 p-2 text-surface-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                   title="Delete log"
                 >
                   <Trash2 size={16} />

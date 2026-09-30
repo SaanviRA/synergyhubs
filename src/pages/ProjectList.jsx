@@ -8,9 +8,17 @@ export default function ProjectList({ classData, onSelectProject, onBack }) {
   const present = projects.filter(p => p.status === 'present');
   const future = projects.filter(p => p.status === 'future');
 
+  const handleSelectProject = (project) => {
+    // Record that student clicked on / visited the project
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${project.id}/visit`, {
+      method: 'POST'
+    }).catch(err => console.error('Error recording project visit:', err));
+    onSelectProject(project);
+  };
+
   const ProjectCard = ({ project }) => (
     <button 
-      onClick={() => onSelectProject(project)}
+      onClick={() => handleSelectProject(project)}
       className="group relative text-left w-full overflow-hidden bg-white rounded-3xl border border-surface-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-brand-300 transition-all duration-300 flex flex-col"
     >
       <div className={`h-2 w-full absolute top-0 left-0 bg-gradient-to-r ${project.color} opacity-90`} style={{ height: '6px' }} />

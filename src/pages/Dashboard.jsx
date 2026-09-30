@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle2, Circle, Clock, AlertCircle, BellRing, ArrowLeft, ArrowRight, Users, Calendar, Sparkles } from 'lucide-react';
 
-export default function Dashboard({ classData, projectData, onBack, onNavigate }) {
+export default function Dashboard({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [team, setTeam] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,7 +39,20 @@ export default function Dashboard({ classData, projectData, onBack, onNavigate }
     fetchData();
   }, [fetchData]);
 
-  const handleNudge = (id, assignee) => {
+  const completedCount = milestones.filter(m => m.status === 'completed').length;
+  const currentProgress = milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : (projectData?.progress || 0);
+
+  // Sync calculated milestone progress back to parent project state
+  useEffect(() => {
+    if (milestones.length > 0 && onUpdateProject) {
+      const calculated = Math.round((completedCount / milestones.length) * 100);
+      if (calculated !== projectData?.progress) {
+        onUpdateProject({ progress: calculated });
+      }
+    }
+  }, [milestones, completedCount, projectData?.progress, onUpdateProject]);
+
+  const handleNudge = (id) => {
     setNudgedMap(prev => ({ ...prev, [id]: true }));
     setTimeout(() => {
       setNudgedMap(prev => ({ ...prev, [id]: false }));
@@ -94,13 +107,13 @@ export default function Dashboard({ classData, projectData, onBack, onNavigate }
         <div className="flex justify-between items-end">
           <h2 className="font-semibold text-surface-800">Overall Progress</h2>
           <span className="text-2xl font-bold text-brand-600">
-            {projectData ? projectData.progress : 65}%
+            {currentProgress}%
           </span>
         </div>
         <div className="w-full h-3 bg-surface-200 rounded-full overflow-hidden">
           <div 
             className={`h-full bg-gradient-to-r ${projectData ? projectData.color : 'from-brand-400 to-brand-600'} rounded-full transition-all duration-1000 ease-out`} 
-            style={{ width: `${projectData ? projectData.progress : 65}%` }}
+            style={{ width: `${currentProgress}%` }}
           />
         </div>
       </div>
@@ -180,7 +193,9 @@ export default function Dashboard({ classData, projectData, onBack, onNavigate }
                     {ms.title}
                   </h3>
                   <div className="flex items-center text-sm text-surface-500 gap-2 flex-wrap">
-                    <span className="font-medium text-surface-700">{ms.assignee}</span>
+                    <span className="font-semibold text-[11px] uppercase tracking-wider text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-100">
+                      Team Milestone
+                    </span>
                     <span>•</span>
                     <span className={ms.status === 'delayed' ? 'text-rose-500 font-medium' : ''}>
                       {ms.date || ms.due}
@@ -196,18 +211,18 @@ export default function Dashboard({ classData, projectData, onBack, onNavigate }
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleNudge(ms.id, ms.assignee);
+                      handleNudge(ms.id);
                     }}
                     className={`h-10 px-3 rounded-xl transition-all flex items-center gap-2 text-sm font-medium border active:scale-95 cursor-pointer shrink-0 ${
                       nudgedMap[ms.id] 
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                         : 'bg-rose-50 text-rose-600 hover:bg-rose-100 border-rose-200'
                     }`}
-                    title={nudgedMap[ms.id] ? 'Nudge sent!' : 'Send a friendly nudge'}
+                    title={nudgedMap[ms.id] ? 'Nudge sent to team!' : 'Send a friendly reminder to team'}
                   >
                     <BellRing size={16} className={nudgedMap[ms.id] ? 'animate-bounce text-emerald-600' : ''} />
                     <span className="hidden sm:inline">
-                      {nudgedMap[ms.id] ? 'Nudged! ✓' : 'Nudge'}
+                      {nudgedMap[ms.id] ? 'Nudged Team! ✓' : 'Nudge Team'}
                     </span>
                   </button>
                 )}

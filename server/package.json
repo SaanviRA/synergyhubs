@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "migrate": "node migrate.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

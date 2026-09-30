@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, CheckCircle2, Clock, AlertCircle, Sparkles, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2 } from 'lucide-react';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
 
-export default function TeacherMilestones({ classData, projectData, onBack }) {
+export default function TeacherMilestones({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [showAiPrompt, setShowAiPrompt] = useState(false);
   const [aiText, setAiText] = useState('');
   const [expandedId, setExpandedId] = useState(null);
@@ -22,17 +22,41 @@ export default function TeacherMilestones({ classData, projectData, onBack }) {
       if (res.ok) {
         const data = await res.json();
         setMilestones(data);
+        const completed = data.filter(m => m.status === 'completed').length;
+        if (data.length > 0 && onUpdateProject) {
+          onUpdateProject({ progress: Math.round((completed / data.length) * 100) });
+        }
       }
     } catch (err) {
       console.error('Error fetching milestones:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [projectData?.id]);
+  }, [projectData?.id, onUpdateProject]);
 
   useEffect(() => {
     fetchMilestones();
   }, [fetchMilestones]);
+
+  const handleUpdateStatus = async (milestoneId, newStatus, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/milestones/${milestoneId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMilestones(prev => prev.map(m => m.id === milestoneId ? { ...m, status: newStatus } : m));
+        if (data.progress !== undefined && onUpdateProject) {
+          onUpdateProject({ progress: data.progress });
+        }
+      }
+    } catch (err) {
+      console.error('Error updating milestone status:', err);
+    }
+  };
 
   const handleOpenDrivePicker = (milestoneId) => {
     if (!creds.clientId || !creds.appId || !creds.developerKey) {
@@ -194,6 +218,7 @@ export default function TeacherMilestones({ classData, projectData, onBack }) {
                   >
                     <div className={`flex items-center gap-2 mb-2 ${isLeft ? 'sm:flex-row-reverse' : ''}`}>
                       <span className="text-sm font-semibold text-indigo-600 px-2.5 py-1 bg-indigo-50 rounded-lg">{ms.date}</span>
+                      <span className="text-xs font-medium text-surface-500 bg-surface-100 px-2 py-0.5 rounded-md">Team Milestone</span>
                       <div className="flex-1" />
                       <div className="h-7 w-7 rounded-full bg-surface-100 flex items-center justify-center text-surface-500 group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors">
                         <ChevronDown size={18} className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -216,6 +241,46 @@ export default function TeacherMilestones({ classData, projectData, onBack }) {
                     <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0'} pt-0`}>
                       <div className="overflow-hidden">
                         <div className={`pt-5 border-t border-surface-200/60 ${isLeft ? 'sm:text-right' : 'sm:text-left'} text-left`}>
+                          
+                          {/* Quick Status Toggles */}
+                          <div className="mb-4 pb-4 border-b border-surface-200/60 flex items-center justify-between flex-wrap gap-2">
+                            <div>
+                              <p className="text-xs font-bold text-surface-600 uppercase tracking-wider">Milestone Status</p>
+                              <p className="text-[11px] text-surface-400">Team milestone progress</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-surface-100 p-1 rounded-xl">
+                              <button
+                                onClick={(e) => handleUpdateStatus(ms.id, 'pending', e)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                                  ms.status === 'pending'
+                                    ? 'bg-white text-surface-900 shadow-sm font-semibold'
+                                    : 'text-surface-600 hover:text-surface-900'
+                                }`}
+                              >
+                                Pending
+                              </button>
+                              <button
+                                onClick={(e) => handleUpdateStatus(ms.id, 'in-progress', e)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                                  ms.status === 'in-progress'
+                                    ? 'bg-indigo-600 text-white shadow-sm font-semibold'
+                                    : 'text-surface-600 hover:text-surface-900'
+                                }`}
+                              >
+                                In Progress
+                              </button>
+                              <button
+                                onClick={(e) => handleUpdateStatus(ms.id, 'completed', e)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                                  ms.status === 'completed'
+                                    ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                                    : 'text-surface-600 hover:text-surface-900'
+                                }`}
+                              >
+                                Completed ✓
+                              </button>
+                            </div>
+                          </div>
                           {ms.submission ? (
                             <div className="space-y-4">
                               <div>

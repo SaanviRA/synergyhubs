@@ -111,6 +111,10 @@ function App() {
       );
     }
 
+    const handleUpdateProject = (updatedFields) => {
+      setSelectedProject((prev) => (prev ? { ...prev, ...updatedFields } : prev));
+    };
+
     if (isTeacher) {
       switch (activeTab) {
         case 'Dashboard':
@@ -120,16 +124,33 @@ function App() {
               projectData={selectedProject} 
               onBack={() => setSelectedProject(null)} 
               onNavigate={setActiveTab}
+              onUpdateProject={handleUpdateProject}
             />
           );
         case 'Timeline':
-          return <TeacherMilestones classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+          return (
+            <TeacherMilestones 
+              classData={selectedClass} 
+              projectData={selectedProject} 
+              onBack={() => setSelectedProject(null)} 
+              onNavigate={setActiveTab}
+              onUpdateProject={handleUpdateProject}
+            />
+          );
         case 'Resources':
           return <TeacherResources classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
         case 'Workspaces':
           return <TeacherWorkspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
         case 'Team':
-          return <TeacherTeam classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+          return (
+            <TeacherTeam 
+              classData={selectedClass} 
+              projectData={selectedProject} 
+              onBack={() => setSelectedProject(null)} 
+              onNavigate={setActiveTab}
+              onUpdateProject={handleUpdateProject}
+            />
+          );
         default:
           return (
             <TeacherDashboard 
@@ -137,6 +158,7 @@ function App() {
               projectData={selectedProject} 
               onBack={() => setSelectedProject(null)} 
               onNavigate={setActiveTab}
+              onUpdateProject={handleUpdateProject}
             />
           );
       }
@@ -150,16 +172,33 @@ function App() {
             projectData={selectedProject} 
             onBack={() => setSelectedProject(null)} 
             onNavigate={setActiveTab}
+            onUpdateProject={handleUpdateProject}
           />
         );
       case 'Timeline':
-        return <Milestones classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+        return (
+          <Milestones 
+            classData={selectedClass} 
+            projectData={selectedProject} 
+            onBack={() => setSelectedProject(null)} 
+            onNavigate={setActiveTab}
+            onUpdateProject={handleUpdateProject}
+          />
+        );
       case 'Resources':
         return <Resources classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
       case 'Workspaces':
         return <Workspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
       case 'Team':
-        return <Team classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+        return (
+          <Team 
+            classData={selectedClass} 
+            projectData={selectedProject} 
+            onBack={() => setSelectedProject(null)} 
+            onNavigate={setActiveTab}
+            onUpdateProject={handleUpdateProject}
+          />
+        );
       default:
         return (
           <Dashboard 
@@ -167,6 +206,7 @@ function App() {
             projectData={selectedProject} 
             onBack={() => setSelectedProject(null)} 
             onNavigate={setActiveTab}
+            onUpdateProject={handleUpdateProject}
           />
         );
     }

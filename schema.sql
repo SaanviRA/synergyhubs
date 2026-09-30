@@ -59,6 +59,9 @@ CREATE TABLE project_members (
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     roles TEXT[] DEFAULT '{}',
     active_log TEXT,
+    has_visited BOOLEAN DEFAULT FALSE,
+    last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    visit_count INTEGER DEFAULT 0,
     PRIMARY KEY (project_id, user_id)
 );
 
@@ -110,6 +113,7 @@ CREATE TABLE evaluation_logs (
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     log_text TEXT NOT NULL,
     date VARCHAR(50) NOT NULL,
+    log_type VARCHAR(50) DEFAULT 'work_log',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -156,17 +160,17 @@ INSERT INTO projects (id, class_id, name, status, progress, color, hue) VALUES
 SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects));
 
 -- Seed project members for Project 101
-INSERT INTO project_members (project_id, user_id, roles, active_log) VALUES
-(101, 1, ARRAY['Researcher'], 'Found 3 primary sources on JFK.'),
-(101, 2, ARRAY['Editor'], 'Reviewed Alex''s sources, drafted outline.'),
-(101, 3, ARRAY['Presenter'], 'Created slide deck template.');
+INSERT INTO project_members (project_id, user_id, roles, active_log, has_visited, last_visited_at, visit_count) VALUES
+(101, 1, ARRAY['Researcher'], 'Found 3 primary sources on JFK.', TRUE, CURRENT_TIMESTAMP - INTERVAL '25 minutes', 5),
+(101, 2, ARRAY['Editor'], 'Reviewed Alex''s sources, drafted outline.', TRUE, CURRENT_TIMESTAMP - INTERVAL '2 hours', 3),
+(101, 3, ARRAY['Presenter'], 'Created slide deck template.', TRUE, CURRENT_TIMESTAMP - INTERVAL '5 minutes', 8);
 
 -- Seed milestones for Project 101
 INSERT INTO milestones (id, project_id, title, details, due_date, status, assigned_to, assigned_user_id, submission_file_name, submission_submitted_at) VALUES
 (1, 101, 'Topic Selection & Approval', 'Decide on the Cold War era and get Mr. Davis to approve it.', 'Mar 11', 'completed', 'Everyone', NULL, 'Topic_Proposal_SpaceRace.pdf', 'Mar 11, 4:30 PM'),
-(2, 101, 'Gather Primary Sources', 'Find at least 5 primary sources from the 1960s regarding the Space Race.', 'Mar 18 (Today)', 'in-progress', 'Alex M.', 1, NULL, NULL),
-(3, 101, 'Draft Introduction', 'Write the first 2 pages of the introduction establishing context.', 'Mar 21', 'delayed', 'Sarah K.', 2, NULL, NULL),
-(4, 101, 'Create Presentation Slides', 'Design the slide deck using the NextHub template.', 'Mar 25', 'pending', 'You', 3, NULL, NULL);
+(2, 101, 'Gather Primary Sources', 'Find at least 5 primary sources from the 1960s regarding the Space Race.', 'Mar 18 (Today)', 'in-progress', 'Everyone', 1, NULL, NULL),
+(3, 101, 'Draft Introduction', 'Write the first 2 pages of the introduction establishing context.', 'Mar 21', 'delayed', 'Everyone', 2, NULL, NULL),
+(4, 101, 'Create Presentation Slides', 'Design the slide deck using the NextHub template.', 'Mar 25', 'pending', 'Everyone', 3, NULL, NULL);
 
 SELECT setval('milestones_id_seq', (SELECT MAX(id) FROM milestones));
 
@@ -179,9 +183,13 @@ INSERT INTO resources (id, project_id, title, type, url, uploader, uploader_id, 
 
 SELECT setval('resources_id_seq', (SELECT MAX(id) FROM resources));
 
--- Seed evaluation logs for Project 101 (for user 3, 'You')
-INSERT INTO evaluation_logs (id, project_id, user_id, log_text, date) VALUES
-(1, 101, 3, 'Researched presentation tools and settled on NextHub flow.', 'Mar 14'),
-(2, 101, 3, 'Attended group meeting, decided on the Cold War topic.', 'Mar 11');
+-- Seed evaluation logs for Project 101
+INSERT INTO evaluation_logs (id, project_id, user_id, log_text, date, log_type) VALUES
+(1, 101, 3, 'Researched presentation tools and settled on NextHub flow.', 'Mar 14', 'work_log'),
+(2, 101, 3, 'Attended group meeting, decided on the Cold War topic.', 'Mar 11', 'work_log'),
+(3, 101, 1, 'Collected 5 archival speech transcripts from the JFK library.', 'Mar 15', 'work_log'),
+(4, 101, 1, 'Organized primary sources folder with citation tags.', 'Mar 17', 'status_update'),
+(5, 101, 2, 'Reviewed speech transcripts and drafted thesis paragraph.', 'Mar 16', 'work_log'),
+(6, 101, 2, 'Outlined 4 main sections for the final research essay.', 'Mar 18', 'status_update');
 
 SELECT setval('evaluation_logs_id_seq', (SELECT MAX(id) FROM evaluation_logs));

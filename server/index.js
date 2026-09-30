@@ -488,6 +488,138 @@ app.post('/api/classes/:classId/projects', async (req, res) => {
     res.status(500).json({ error: 'Server error creating project' });
   }
 });
+// Helper: Recalculate project progress from milestone completions
+const recalculateProjectProgress = async (projectId) => {
+  try {
+    const msRes = await pool.query('SELECT status FROM milestones WHERE project_id = $1', [projectId]);
+    if (msRes.rows.length > 0) {
+      const completed = msRes.rows.filter(m => m.status === 'completed').length;
+      const progress = Math.round((completed / msRes.rows.length) * 100);
+      await pool.query('UPDATE projects SET progress = $1 WHERE id = $2', [progress, projectId]);
+      return progress;
+    }
+  } catch (err) {
+    console.error('Error recalculating project progress:', err);
+  }
+  return 0;
+};
+
+// Fetch single project details with dynamic progress
+app.get('/api/projects/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const projectRes = await pool.query('SELECT * FROM projects WHERE id = $1', [projectId]);
+    if (projectRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const proj = projectRes.rows[0];
+    const progress = await recalculateProjectProgress(projectId);
+    res.json({
+      id: proj.id,
+      classId: proj.class_id,
+      name: proj.name,
+      status: proj.status,
+      progress,
+      color: proj.color,
+      hue: proj.hue
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching project' });
+  }
+});
+
+// Record student project visit / click
+app.post('/api/projects/:projectId/visit', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const memberCheck = await pool.query(
+      'SELECT user_id FROM project_members WHERE project_id = $1 AND user_id = $2',
+      [projectId, req.userId]
+    );
+
+    if (memberCheck.rows.length > 0) {
+      await pool.query(
+        `UPDATE project_members 
+         SET has_visited = TRUE, 
+             last_visited_at = CURRENT_TIMESTAMP, 
+             visit_count = COALESCE(visit_count, 0) + 1 
+         WHERE project_id = $1 AND user_id = $2`,
+        [projectId, req.userId]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO project_members (project_id, user_id, roles, active_log, has_visited, last_visited_at, visit_count)
+         VALUES ($1, $2, ARRAY['Member'], 'Joined project workspace', TRUE, CURRENT_TIMESTAMP, 1)
+         ON CONFLICT (project_id, user_id) 
+         DO UPDATE SET has_visited = TRUE, last_visited_at = CURRENT_TIMESTAMP, visit_count = COALESCE(project_members.visit_count, 0) + 1`,
+        [projectId, req.userId]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error recording project visit' });
+  }
+});
+
+// Fetch history of student updates & engagement for teacher view
+app.get('/api/projects/:projectId/student-history', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    // 1. Fetch student members of this project
+    const membersRes = await pool.query(
+      `SELECT u.id, u.name, u.email, u.avatar, pm.roles, pm.active_log as "activeLog",
+              COALESCE(pm.has_visited, FALSE) as "hasVisited",
+              pm.last_visited_at as "lastVisitedAt",
+              COALESCE(pm.visit_count, 0) as "visitCount"
+       FROM project_members pm
+       JOIN users u ON pm.user_id = u.id
+       WHERE pm.project_id = $1 AND u.role = 'student'
+       ORDER BY pm.has_visited DESC, pm.last_visited_at DESC NULLS LAST, u.name ASC`,
+      [projectId]
+    );
+
+    // 2. Fetch evaluation/activity logs for all users in this project
+    const logsRes = await pool.query(
+      `SELECT el.id, el.user_id as "userId", el.log_text as "text", el.date, 
+              COALESCE(el.log_type, 'work_log') as "type", el.created_at as "createdAt"
+       FROM evaluation_logs el
+       WHERE el.project_id = $1
+       ORDER BY el.id DESC`,
+      [projectId]
+    );
+
+    const history = membersRes.rows.map(student => {
+      const studentLogs = logsRes.rows.filter(l => l.userId === student.id);
+      return {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        avatar: student.avatar,
+        roles: student.roles || [],
+        activeLog: student.activeLog || null,
+        hasVisited: student.hasVisited,
+        lastVisitedAt: student.lastVisitedAt,
+        visitCount: student.visitCount,
+        updates: studentLogs.map(l => ({
+          id: l.id,
+          text: l.text,
+          date: l.date,
+          type: l.type,
+          createdAt: l.createdAt
+        }))
+      };
+    });
+
+    res.json(history);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error fetching student history' });
+  }
+});
+
 // -------------------------------------------------------------
 // TEAM HUB ENDPOINTS
 // -------------------------------------------------------------
@@ -497,7 +629,10 @@ app.get('/api/projects/:projectId/team', async (req, res) => {
   const { projectId } = req.params;
   try {
     const teamResult = await pool.query(
-      `SELECT u.id, u.name, u.email, u.avatar, u.is_me, u.is_me as "isMe", pm.roles, pm.active_log as "activeLog"
+      `SELECT u.id, u.name, u.email, u.avatar, u.is_me, u.is_me as "isMe", pm.roles, pm.active_log as "activeLog",
+              COALESCE(pm.has_visited, FALSE) as "hasVisited",
+              pm.last_visited_at as "lastVisitedAt",
+              COALESCE(pm.visit_count, 0) as "visitCount"
        FROM project_members pm
        JOIN users u ON pm.user_id = u.id
        WHERE pm.project_id = $1
@@ -597,11 +732,21 @@ app.post('/api/projects/:projectId/team/update', async (req, res) => {
   const { projectId } = req.params;
   const { text } = req.body;
 
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
   try {
     await pool.query(
       'UPDATE project_members SET active_log = $1 WHERE project_id = $2 AND user_id = $3',
       [text, projectId, req.userId]
     );
+
+    // Save to evaluation_logs as a status update
+    await pool.query(
+      `INSERT INTO evaluation_logs (project_id, user_id, log_text, date, log_type)
+       VALUES ($1, $2, $3, $4, 'status_update')`,
+      [projectId, req.userId, text, dateStr]
+    );
+
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -609,13 +754,34 @@ app.post('/api/projects/:projectId/team/update', async (req, res) => {
   }
 });
 
-// Fetch private logs for current user
+// Fetch logs (private user logs for students, or all student logs if teacher)
 app.get('/api/projects/:projectId/logs', async (req, res) => {
   const { projectId } = req.params;
+  const { userId } = req.query;
   try {
+    const userRoleRes = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+    const isTeacher = userRoleRes.rows[0]?.role === 'teacher';
+
+    if (isTeacher && !userId) {
+      const logsResult = await pool.query(
+        `SELECT el.id, el.log_text as text, el.date, el.created_at, el.user_id as "userId",
+                COALESCE(el.log_type, 'work_log') as "type", u.name as "userName", u.avatar
+         FROM evaluation_logs el
+         JOIN users u ON el.user_id = u.id
+         WHERE el.project_id = $1
+         ORDER BY el.id DESC`,
+        [projectId]
+      );
+      return res.json(logsResult.rows);
+    }
+
+    const targetUserId = userId || req.userId;
     const logsResult = await pool.query(
-      'SELECT id, log_text as text, date FROM evaluation_logs WHERE project_id = $1 AND user_id = $2 ORDER BY id DESC',
-      [projectId, req.userId]
+      `SELECT id, log_text as text, date, created_at, COALESCE(log_type, 'work_log') as "type"
+       FROM evaluation_logs 
+       WHERE project_id = $1 AND user_id = $2 
+       ORDER BY id DESC`,
+      [projectId, targetUserId]
     );
     res.json(logsResult.rows);
   } catch (err) {
@@ -634,7 +800,9 @@ app.post('/api/projects/:projectId/logs', async (req, res) => {
   try {
     // Save to private logs
     const newLogResult = await pool.query(
-      'INSERT INTO evaluation_logs (project_id, user_id, log_text, date) VALUES ($1, $2, $3, $4) RETURNING id, log_text as text, date',
+      `INSERT INTO evaluation_logs (project_id, user_id, log_text, date, log_type) 
+       VALUES ($1, $2, $3, $4, 'work_log') 
+       RETURNING id, log_text as text, date`,
       [projectId, req.userId, text, dateStr]
     );
 
@@ -702,9 +870,67 @@ app.get('/api/projects/:projectId/milestones', async (req, res) => {
   }
 });
 
+// Update a milestone (status, title, details, date) and recalculate project progress
+app.patch('/api/projects/:projectId/milestones/:milestoneId', async (req, res) => {
+  const { projectId, milestoneId } = req.params;
+  const { status, title, details, date } = req.body;
+
+  try {
+    const setClauses = [];
+    const values = [];
+    let idx = 1;
+
+    if (status !== undefined) {
+      setClauses.push(`status = $${idx++}`);
+      values.push(status);
+    }
+    if (title !== undefined) {
+      setClauses.push(`title = $${idx++}`);
+      values.push(title);
+    }
+    if (details !== undefined) {
+      setClauses.push(`details = $${idx++}`);
+      values.push(details);
+    }
+    if (date !== undefined) {
+      setClauses.push(`due_date = $${idx++}`);
+      values.push(date);
+    }
+
+    if (setClauses.length > 0) {
+      values.push(milestoneId);
+      values.push(projectId);
+      await pool.query(
+        `UPDATE milestones SET ${setClauses.join(', ')} WHERE id = $${idx++} AND project_id = $${idx++}`,
+        values
+      );
+    }
+
+    // Recalculate project progress
+    const progress = await recalculateProjectProgress(projectId);
+
+    // If status changed to completed, record an update in evaluation_logs
+    if (status === 'completed') {
+      const msInfo = await pool.query('SELECT title FROM milestones WHERE id = $1', [milestoneId]);
+      const msTitle = msInfo.rows[0]?.title || 'Milestone';
+      const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      await pool.query(
+        `INSERT INTO evaluation_logs (project_id, user_id, log_text, date, log_type)
+         VALUES ($1, $2, $3, $4, 'milestone_completed')`,
+        [projectId, req.userId, `Completed milestone "${msTitle}"`, dateStr]
+      );
+    }
+
+    res.json({ success: true, progress });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error updating milestone' });
+  }
+});
+
 // Submit work for a milestone
 app.post('/api/projects/:projectId/milestones/:milestoneId/submit', async (req, res) => {
-  const { milestoneId } = req.params;
+  const { projectId, milestoneId } = req.params;
   const { fileName, fileUrl } = req.body;
 
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -721,10 +947,23 @@ app.post('/api/projects/:projectId/milestones/:milestoneId/submit', async (req, 
            submission_file_name = $1,
            submission_submitted_at = $2,
            submission_file_url = $3
-       WHERE id = $4`,
-      [fileName || 'Submission.pdf', dateStr, fileUrl || null, milestoneId]
+       WHERE id = $4 AND project_id = $5`,
+      [fileName || 'Submission.pdf', dateStr, fileUrl || null, milestoneId, projectId]
     );
-    res.json({ success: true, fileName, fileUrl, submittedAt: dateStr });
+
+    // Recalculate project progress
+    const progress = await recalculateProjectProgress(projectId);
+
+    // Log the submission in evaluation_logs for history
+    const msInfo = await pool.query('SELECT title FROM milestones WHERE id = $1', [milestoneId]);
+    const msTitle = msInfo.rows[0]?.title || 'Milestone';
+    await pool.query(
+      `INSERT INTO evaluation_logs (project_id, user_id, log_text, date, log_type)
+       VALUES ($1, $2, $3, $4, 'submission')`,
+      [projectId, req.userId, `Submitted work for "${msTitle}": ${fileName || 'Document'}`, dateStr]
+    );
+
+    res.json({ success: true, fileName, fileUrl, submittedAt: dateStr, progress });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error submitting milestone work' });
