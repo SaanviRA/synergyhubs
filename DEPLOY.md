@@ -1,354 +1,281 @@
 # Deployment Guide for Ubuntu
 
-This guide walks you through deploying the Group Collaboration App (React/Vite frontend + Node/Express backend + PostgreSQL database) on a fresh Ubuntu server (Ubuntu 22.04 LTS or 24.04 LTS).
+The app is deployed as a **release bundle**: one `.tar.gz` built on your development machine that
+contains everything the server runs. The server never runs `npm`, `uv`, or a build step - updating is
+"copy the bundle, run one command", which swaps the release and restarts the service.
 
 ---
 
 ## Architecture Overview
 
-1. **Frontend**: React + Vite + Tailwind CSS. Served as static files by **Nginx**.
-2. **Backend**: Node.js + Express API. Managed as a background service via **PM2** on port `5001`.
-3. **Database**: **PostgreSQL** running in a Docker container (using the existing `docker-compose.yml`).
-4. **Proxy**: **Nginx** handles TLS/SSL (HTTPS) termination and routes `/api/*` requests to the Express server while serving the React static assets for all other routes.
+```
+Browser ──HTTPS──> Nginx ──┬── /        static files   /opt/group_app/current/dist      (frontend)
+                           └── /api/*   proxy  ──>  127.0.0.1:5001  uvicorn + FastAPI   (systemd: group-app-api)
+                                                          │
+                                                          └──> 127.0.0.1:5432  PostgreSQL (Docker)
+```
+
+1. **Frontend**: React + Vite, compiled to static files inside the bundle and served directly by **Nginx**.
+2. **Backend**: Python + FastAPI, run by **systemd** as the `group-app-api` service on `127.0.0.1:5001`.
+3. **Database**: **PostgreSQL 15** in a Docker container.
+4. **Proxy**: **Nginx** terminates HTTPS, serves the frontend, and forwards `/api/*` to the backend.
+
+On the server:
+
+| Path | Contents |
+|---|---|
+| `/opt/group_app/releases/<version>/` | One unpacked bundle per deployment (the newest 5 are kept) |
+| `/opt/group_app/current` | Symlink to the live release |
+| `/etc/group_app/group_app.env` | Secrets and settings. Survives deployments. |
+| `/etc/systemd/system/group-app-api.service` | The API service |
+| `/usr/local/bin/group-app-deploy` | The deploy command |
+
+### How the frontend is enabled
+
+There is no frontend process to start. The bundle contains the compiled site in `dist/`, and Nginx is
+pointed at `/opt/group_app/current/dist` (Step 5). Because `current` is a symlink that each deployment
+re-points, a new frontend is live the moment a deployment finishes - no Nginx reload needed. If the site
+shows the Nginx welcome page or a 404, the Nginx site from Step 5 is not enabled; if pages load but
+logging in fails, check the API (`systemctl status group-app-api`) and that the bundle was built with
+the right `VITE_API_URL`.
 
 ---
 
-## Step 1: Update System & Install Core Utilities
+## Step 1: Build a bundle (on your development machine)
 
-Log in to your Ubuntu server and run the following commands to update system packages and install basic tools:
+Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/), and a checkout of this repository.
+
+```bash
+VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh
+```
+
+This writes `build/group_app-<version>.tar.gz` (about 13 MB).
+
+- `VITE_API_URL` is the public address of the site. It is compiled into the frontend, so a bundle is
+  tied to one domain. You can also set it in `.env` instead of on the command line.
+- The Google values (`VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_APP_ID`, `VITE_GOOGLE_API_KEY`) are read from
+  `.env` and compiled in the same way.
+- The Python packages inside the bundle are built for **Python 3.12 on x86_64** (Ubuntu 24.04). For a
+  different server, set the version to match its `python3 --version`:
+
+  ```bash
+  BUNDLE_PYTHON=3.10 scripts/build_bundle.sh                                   # Ubuntu 22.04
+  BUNDLE_PLATFORM=aarch64-manylinux_2_28 scripts/build_bundle.sh               # ARM servers
+  ```
+
+  The deploy command refuses a bundle built for the wrong Python version.
+
+Package versions come from the lockfiles (`package-lock.json`, `backend/uv.lock`); Python packages are
+hash-verified, and npm install scripts are disabled during the build.
+
+---
+
+## Step 2: Prepare the server (first time only)
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl git build-essential ufw nginx
+sudo apt install -y nginx python3 curl openssl ufw
 ```
 
----
-
-## Step 2: Install Node.js (v20 LTS)
-
-The backend and frontend build tools require Node.js. Install Node.js v20 using NodeSource:
+Install Docker for the database:
 
 ```bash
-# Download and import the NodeSource GPG key
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-
-# Create deb repository configuration
-NODE_MAJOR=20
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
-
-# Update package lists and install Node.js
-sudo apt-get update
-sudo apt-get install nodejs -y
-```
-
-Verify your installation:
-```bash
-node -v
-npm -v
-```
-
----
-
-## Step 3: Install Docker & Docker Compose (for PostgreSQL)
-
-Since the project already includes a `docker-compose.yml` for PostgreSQL:
-
-```bash
-# Add Docker's official GPG key:
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository to Apt sources:
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 ```
 
-Verify Docker installation:
-```bash
-sudo docker --version
-sudo docker compose version
-```
+Node.js, npm, PM2, and uv are **not** needed on the server.
 
 ---
 
-## Step 4: Clone Repository & Setup Files
+## Step 3: Create the database (first time only)
 
-1. Clone the repository into a directory of your choice (e.g., `/var/www/group_app`):
-   ```bash
-   sudo mkdir -p /var/www
-   sudo chown -R $USER:$USER /var/www
-   cd /var/www
-   git clone <YOUR_REPOSITORY_URL> group_app
-   cd group_app
-   ```
-
-2. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
----
-
-## Step 5: Start the Database Container
-
-The `docker-compose.yml` configures PostgreSQL 15 and initializes it using `schema.sql`.
-
-Start the container in detached mode:
-```bash
-sudo docker compose up -d
-```
-
-Verify that the database is running:
-```bash
-sudo docker compose ps
-```
-> **Note**: The SQL seed file (`schema.sql`) runs automatically on the first boot of the container, seeding initial student/teacher profiles and structural constraints.
-
----
-
-## Step 6: Configure Environment Variables
-
-Edit the `.env` file at the root of the project:
+Copy the bundle to the server (`scp build/group_app-<version>.tar.gz user@server:`), then unpack it once
+to get the schema:
 
 ```bash
-nano .env
+tar -xzf group_app-<version>.tar.gz
+
+# Choose a strong password - it goes into the env file in Step 4
+sudo docker run -d --name group_app_postgres --restart always \
+  -e POSTGRES_DB=group_app_db -e POSTGRES_USER=pguser -e POSTGRES_PASSWORD='choose-a-strong-password' \
+  -p 127.0.0.1:5432:5432 \
+  -v group_app_postgres_data:/var/lib/postgresql/data \
+  postgres:15-alpine
+
+# Wait a few seconds for it to start, then load the schema
+sudo docker exec -i group_app_postgres psql -U pguser -d group_app_db < group_app-<version>/schema.sql
 ```
 
-Ensure the configuration is populated. Here is an example production `.env` configuration:
+> **Warnings**
+> - `schema.sql` **drops and recreates every table**. Only run it on a new, empty database.
+> - It also seeds demo classes and five demo accounts (`alex@school.edu`, `davis@school.edu`, ...) that
+>   share one password. Remove them before real users arrive:
+>   `sudo docker exec group_app_postgres psql -U pguser -d group_app_db -c "DELETE FROM classes WHERE id IN (1,2); DELETE FROM users WHERE id <= 5;"`
+> - Keep the port bound to `127.0.0.1` as shown. Ports published by Docker are **not** protected by UFW.
 
-```env
-# Google Cloud Console Credentials (for Drive Picker / Auth)
-VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
-VITE_GOOGLE_APP_ID=your-google-app-id
-VITE_GOOGLE_API_KEY=your-google-api-key
+---
 
-# JWT Token secret (Generate a strong random string)
-JWT_SECRET=super_secret_production_key_change_me_1234567
+## Step 4: First deployment
 
-# Database Connection (Matches docker-compose.yml values)
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_NAME=group_app_db
-DB_USER=pguser
-DB_PASSWORD=pgpassword
-
-# API URL for Frontend requests (Do not leave empty, as code will fallback to http://localhost:5001)
-# Use your domain (e.g., https://yourdomain.com) or server IP (e.g., http://203.0.113.1)
-VITE_API_URL="https://yourdomain.com"
+```bash
+sudo group_app-<version>/deploy/deploy.sh group_app-<version>.tar.gz
 ```
 
-> **IMPORTANT**: In Vite, environment variables starting with `VITE_` are injected into the static files at **build time**. If you edit your `.env` file, you **must rebuild the frontend** using `npm run build` for the changes to take effect on the client side.
+On the first run this also:
 
+- creates `/etc/group_app/group_app.env` with a freshly generated `JWT_SECRET` and the Google client ID
+  from the bundle,
+- installs and enables the `group-app-api` systemd service,
+- installs itself as `group-app-deploy` for future updates.
 
----
+If you chose your own database password in Step 3, this first run stops at the migration step with an
+authentication error, because the new env file still has the default password. Set it and run the same
+command again:
 
-## Step 6b: Google OAuth 2.0 Compliance & Setup (Avoid Blocks)
-
-To comply with Google's OAuth 2.0 security policies and prevent users from encountering "Access Blocked" or "Error 400" screens, complete the following setup in the [Google Cloud Console](https://console.cloud.google.com/):
-
-### 1. Register a Custom OAuth Client ID
-Do not use a shared or default Client ID in production. Register your own unique client ID:
-- Navigate to **APIs & Services** > **Credentials**.
-- Click **+ Create Credentials** > **OAuth client ID**.
-- Select **Web application** as the application type.
-- Add a Name (e.g., `Group Collaboration App`).
-
-### 2. Configure Authorized Origins (Strict Google Policies)
-Google enforces strict security policies on Web client IDs. Failure to comply with these will block authentication requests:
-- **Authorized JavaScript origins**:
-  - Add your domain: `https://yourdomain.com` (Must be HTTPS).
-  - Add localhost for local development: `http://localhost:5173` (Vite) and `http://localhost:5001` (Express).
-  - **CRITICAL**: Google **does not allow** bare IP addresses (e.g., `http://192.168.1.15` or `http://203.0.113.1`) as authorized origins. You **must** map a domain name to your server and use HTTPS in production.
-- **Authorized redirect URIs**:
-  - For Google Identity Services (One Tap/Sign-In buttons), the Authorized JavaScript Origin is generally sufficient, but if you define redirect endpoints, they must match exactly.
-
-### 3. Configure the OAuth Consent Screen
-- Go to **APIs & Services** > **OAuth consent screen**.
-- **User Type**: Select **External** (to allow any Google account) or **Internal** (if deploying strictly within a school/organization's domain).
-- **Publishing Status**: 
-  - If status is **Testing**, only accounts explicitly added under **Test users** on this page will be allowed to sign in. Any other Google account will get blocked with an `access_denied` error.
-  - To allow general logins, click **Publish App** to change the status to **In Production**.
-- **Scopes**:
-  - Since this app integrates Google Drive (via the Picker API), it uses sensitive scopes to access user files. If your app is "In Production" but unverified by Google, users will see an "Unverified App" warning. You can bypass this warning during testing (by clicking "Advanced" > "Go to [app name] (unsafe)"). To remove this warning for all users, you must submit your app for Google verification from the Consent Screen dashboard.
-
----
-
-## Step 7: Build and Run the Backend (using PM2)
-
-To keep the Express app running in the background and ensure it restarts on server reboots, we use the process manager **PM2**:
-
-1. Install PM2 globally:
-   ```bash
-   sudo npm install -g pm2
-   ```
-
-2. Install backend dependencies:
-   ```bash
-   cd /var/www/group_app/server
-   npm install
-   ```
-
-3. Start the backend app:
-   ```bash
-   pm2 start index.js --name "group-app-api"
-   ```
-
-4. Configure PM2 to start on system boot:
-   ```bash
-   pm2 startup systemd
-   ```
-   *Follow the command outputted on the screen to run the systemd configuration command.*
-
-5. Save the running process list:
-   ```bash
-   pm2 save
-   ```
-
----
-
-## Step 8: Build the Frontend Assets
-
-1. Navigate to the root directory and install dependencies:
-   ```bash
-   cd /var/www/group_app
-   npm install
-   ```
-
-2. Compile the production bundle:
-   ```bash
-   npm run build
-   ```
-   This will generate a static production folder inside `/var/www/group_app/dist`.
-
----
-
-## Step 9: Configure Nginx Reverse Proxy
-
-Create an Nginx configuration file to serve the static frontend and route API calls to the PM2 backend service.
-
-1. Open a new Nginx site configuration file:
-   ```bash
-   sudo nano /etc/nginx/sites-available/group_app
-   ```
-
-2. Paste the following configuration (replace `yourdomain.com` with your domain name or public server IP address):
-
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com; # Replace with your domain or server IP
-
-    # Root folder of the compiled Vite frontend
-    root /var/www/group_app/dist;
-    index index.html;
-
-    # Serve static frontend pages
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Proxy API requests to Node.js backend
-    location /api {
-        proxy_pass http://127.0.0.1:5001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Custom size limits for uploads (if Google Drive links aren't enough)
-    client_max_body_size 10M;
-}
+```bash
+sudo nano /etc/group_app/group_app.env      # set DB_PASSWORD (and check GOOGLE_CLIENT_ID)
+sudo group-app-deploy group_app-<version>.tar.gz
+curl http://127.0.0.1:5001/api/health       # {"status":"ok"}
 ```
 
-3. Enable the configuration and test it:
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/group_app /etc/nginx/sites-enabled/
-   # Remove the default nginx profile to avoid conflicts:
-   sudo rm /etc/nginx/sites-enabled/default
-   
-   # Test Nginx syntax
-   sudo nginx -t
-   ```
+`/etc/group_app/group_app.env` settings:
 
-4. Restart Nginx:
-   ```bash
-   sudo systemctl restart nginx
-   ```
+| Variable | Purpose |
+|---|---|
+| `JWT_SECRET` | Signs login tokens. Required, at least 32 characters - the API refuses to start otherwise. Changing it logs everyone out. |
+| `GOOGLE_CLIENT_ID` | Must equal the `VITE_GOOGLE_CLIENT_ID` the bundle was built with. Google sign-in is refused when empty. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
+| `CORS_ORIGINS` | Leave empty when Nginx serves the frontend and `/api` from the same domain (the setup in this guide). |
 
 ---
 
-## Step 10: Configure Firewall (UFW)
+## Step 5: Enable the frontend in Nginx (first time only)
 
-Secure your server by enabling the firewall and allowing Nginx HTTP/HTTPS traffic:
+```bash
+sudo cp /opt/group_app/current/deploy/nginx.conf.example /etc/nginx/sites-available/group_app
+sudo nano /etc/nginx/sites-available/group_app        # set server_name to your domain
+sudo ln -s /etc/nginx/sites-available/group_app /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx
+```
+
+The site configuration serves `/opt/group_app/current/dist` and proxies `/api` to `127.0.0.1:5001`.
+
+---
+
+## Step 6: Firewall and HTTPS (first time only)
 
 ```bash
 sudo ufw allow OpenSSH
 sudo ufw allow 'Nginx Full'
 sudo ufw enable
+
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+sudo systemctl status certbot.timer        # automatic renewal
+```
+
+HTTPS is required for Google sign-in (see below).
+
+---
+
+## Updating the app
+
+On your development machine:
+
+```bash
+VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh
+scp build/group_app-<version>.tar.gz user@server:
+```
+
+On the server:
+
+```bash
+sudo group-app-deploy group_app-<version>.tar.gz
+```
+
+That command unpacks the bundle into a new release directory, applies `migration.sql` (safe to re-run),
+points `current` at the new release, restarts `group-app-api`, and checks `/api/health`. If the health
+check fails, it switches back to the previous release automatically and prints the service log.
+
+### Rolling back manually
+
+```bash
+ls /opt/group_app/releases
+sudo ln -sfn /opt/group_app/releases/<older-version> /opt/group_app/current
+sudo systemctl restart group-app-api
 ```
 
 ---
 
-## Step 11: Setup HTTPS (SSL) with Let's Encrypt
+## Moving an existing Node/PM2 server to this setup
 
-If you have mapped a domain name to your server's IP address, secure it with HTTPS using Certbot:
+1. Stop the old API so port 5001 is free: `pm2 delete group-app-api && pm2 save` (PM2 and Node.js can then be uninstalled).
+2. Keep the existing `group_app_postgres` container - skip Step 3.
+3. Run Step 4. Copy your old values into `/etc/group_app/group_app.env`. If the old `.env` had no
+   `JWT_SECRET`, keep the generated one: everyone is simply asked to log in again.
+4. In `/etc/nginx/sites-available/group_app`, change `root` to `/opt/group_app/current/dist` and reload Nginx.
 
-1. Install Certbot and its Nginx plugin:
-   ```bash
-   sudo apt install -y certbot python3-certbot-nginx
-   ```
+Behaviour changes to expect: requests without a login token are now rejected (previously they acted as a
+built-in demo user), and users can only reach projects in classes they belong to.
 
-2. Run Certbot to acquire and install the SSL certificate:
-   ```bash
-   sudo certbot --nginx -d yourdomain.com
-   ```
-   *Follow the interactive prompt to complete the configuration. Certbot will automatically rewrite the Nginx file to enable SSL redirection.*
+---
 
-3. Verify automatic certificate renewal:
-   ```bash
-   sudo systemctl status certbot.timer
-   ```
+## Google OAuth 2.0 Setup
+
+To avoid "Access Blocked" or "Error 400" screens, complete the following in the
+[Google Cloud Console](https://console.cloud.google.com/):
+
+### 1. Register a Custom OAuth Client ID
+- Navigate to **APIs & Services** > **Credentials**.
+- Click **+ Create Credentials** > **OAuth client ID**, application type **Web application**.
+- Put the client ID in `.env` as `VITE_GOOGLE_CLIENT_ID` before building the bundle, and make sure
+  `GOOGLE_CLIENT_ID` in `/etc/group_app/group_app.env` has the same value.
+
+### 2. Configure Authorized Origins
+- **Authorized JavaScript origins**:
+  - Your domain: `https://yourdomain.com` (must be HTTPS).
+  - For local development: `http://localhost:5173` (Vite).
+  - Google **does not allow** bare IP addresses as authorized origins. You must use a domain name with HTTPS in production.
+
+### 3. Configure the OAuth Consent Screen
+- **User Type**: **External** (any Google account) or **Internal** (your school/organization only).
+- **Publishing Status**: while in **Testing**, only accounts listed under **Test users** can sign in. Click **Publish App** to allow everyone.
+- **Scopes**: the Drive Picker uses sensitive scopes, so an unverified app shows an "Unverified App" warning until you submit it for Google verification.
 
 ---
 
 ## Maintenance & Logs
 
-Here are standard diagnostic commands to inspect the health of your application:
-
-* **View API Logs (Node.js)**:
+* **API status and logs**:
   ```bash
-  pm2 logs group-app-api
+  systemctl status group-app-api
+  sudo journalctl -u group-app-api -f
   ```
-* **Restart Backend service**:
+* **Restart the API** (for example after editing the env file):
   ```bash
-  pm2 restart group-app-api
+  sudo systemctl restart group-app-api
   ```
-* **View Database Logs (PostgreSQL)**:
+* **Which release is live**:
   ```bash
-  cd /var/www/group_app
-  sudo docker compose logs -f
+  cat /opt/group_app/current/BUNDLE_INFO
   ```
-* **View Nginx Error Logs**:
+* **Database logs**:
+  ```bash
+  sudo docker logs -f group_app_postgres
+  ```
+* **Database backup**:
+  ```bash
+  sudo docker exec group_app_postgres pg_dump -U pguser group_app_db > backup-$(date +%F).sql
+  ```
+* **Nginx**:
   ```bash
   sudo tail -f /var/log/nginx/error.log
-  ```
-* **Restart Nginx**:
-  ```bash
   sudo systemctl restart nginx
   ```

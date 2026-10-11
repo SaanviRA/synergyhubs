@@ -26,23 +26,34 @@ BEGIN
     END IF;
 END $$;
 
--- 2. Add visit tracking columns to project_members table
-ALTER TABLE project_members 
-    ADD COLUMN IF NOT EXISTS has_visited BOOLEAN DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS visit_count INTEGER DEFAULT 0;
+-- 2. Add visit tracking columns to project_members table.
+--    Members that predate visit tracking are backfilled as visited, once, when the
+--    column is first created. Re-running this script never resets visit status.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'project_members' AND column_name = 'has_visited'
+    ) THEN
+        ALTER TABLE project_members ADD COLUMN has_visited BOOLEAN DEFAULT FALSE;
+        UPDATE project_members SET has_visited = TRUE;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'project_members' AND column_name = 'visit_count'
+    ) THEN
+        ALTER TABLE project_members ADD COLUMN visit_count INTEGER DEFAULT 0;
+        UPDATE project_members SET visit_count = 1 WHERE has_visited;
+    END IF;
+END $$;
+
+ALTER TABLE project_members
+    ADD COLUMN IF NOT EXISTS last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';
-
--- 4. Backfill existing project members with active visit status
-UPDATE project_members
-SET 
-    has_visited = TRUE,
-    visit_count = GREATEST(COALESCE(visit_count, 0), 1),
-    last_visited_at = COALESCE(last_visited_at, CURRENT_TIMESTAMP)
-WHERE has_visited IS NULL OR has_visited = FALSE;
 
 -- 5. Backfill existing evaluation_logs with default log_type
 UPDATE evaluation_logs

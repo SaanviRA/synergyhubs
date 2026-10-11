@@ -10,7 +10,8 @@ services:
       POSTGRES_USER: pguser
       POSTGRES_PASSWORD: pgpassword
     ports:
-      - "5432:5432"
+      # Bound to localhost only: Docker-published ports bypass UFW
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql

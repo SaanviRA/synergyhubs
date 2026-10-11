@@ -1,0 +1,24 @@
+[Unit]
+Description=Group App API (FastAPI)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+# /opt/group_app/current is a symlink to the live release; a restart picks up a new release
+WorkingDirectory=/opt/group_app/current/backend
+EnvironmentFile=/etc/group_app/group_app.env
+Environment=PYTHONPATH=/opt/group_app/current/backend/vendor
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 5001
+Restart=always
+RestartSec=3
+
+# Run as an unprivileged throwaway user with a read-only view of the system
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

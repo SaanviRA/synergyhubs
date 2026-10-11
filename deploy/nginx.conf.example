@@ -1,0 +1,25 @@
+# /etc/nginx/sites-available/group_app
+server {
+    listen 80;
+    server_name yourdomain.com; # Replace with your domain
+
+    # The compiled frontend from the live release bundle
+    root /opt/group_app/current/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API requests go to the FastAPI service (systemd unit group-app-api)
+    location /api {
+        proxy_pass http://127.0.0.1:5001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    client_max_body_size 10M;
+}
