@@ -85,7 +85,8 @@ backend/
 
 - Every endpoint except `/api/auth/*` and `/api/health` requires `Authorization: Bearer <token>`.
 - Project endpoints require the caller to be a member of the project or of its class.
-- Only teachers can create classes and projects, view student history, or read another user's work logs.
+- Anyone can create a class; its creator owns it and is the only one who can add projects to it.
+- Only teachers can view student history or read another user's work logs.
 - Errors are always JSON of the form `{"error": "message"}`.
 
 ## Database changes

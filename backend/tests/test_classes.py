@@ -46,6 +46,7 @@ async def test_list_classes_only_returns_the_callers_classes(client, outsider):
         "teacher": "Mr. Davis",
         "joinCode": "8XYZ-2PLQ",
         "color": "from-blue-500 to-indigo-600",
+        "role": "student",
         "members": 4,
         "projects": classes[0]["projects"],
     }
@@ -99,11 +100,38 @@ async def test_teacher_creates_class(client):
     mine = (await client.get("/api/classes", headers=auth(MR_DAVIS))).json()
     new = next(c for c in mine if c["id"] == created["id"])
     assert new["teacher"] == "Mr. Davis" and new["members"] == 1 and new["projects"] == []
+    assert new["role"] == "teacher"
+
+
+async def test_student_creates_class_and_owns_it(client, conn, outsider):
+    res = await client.post("/api/classes", json={"className": "Study Group"}, headers=outsider)
+    assert res.status_code == 200
+    created = res.json()["class"]
+
+    mine = (await client.get("/api/classes", headers=outsider)).json()
+    assert [(c["id"], c["teacher"], c["role"], c["members"]) for c in mine] == [
+        (created["id"], "Olive Outsider", "teacher", 1)
+    ]
+
+    # Classmates join with the code as ordinary students
+    await client.post("/api/classes/join", json={"joinCode": created["joinCode"]}, headers=auth(ALEX))
+    joined = next(c for c in (await client.get("/api/classes", headers=auth(ALEX))).json() if c["id"] == created["id"])
+    assert joined["role"] == "student" and joined["members"] == 2
+
+    # The owner can create projects, and is on the team alongside the classmates
+    res = await client.post(f"/api/classes/{created['id']}/projects", json=PROJECT_BODY, headers=outsider)
+    assert res.status_code == 201
+    owner_id = await conn.fetchval("SELECT id FROM users WHERE email = 'olive@example.com'")
+    members = await conn.fetch(
+        "SELECT user_id FROM project_members WHERE project_id = $1 ORDER BY 1", res.json()["id"]
+    )
+    assert [m["user_id"] for m in members] == [1, owner_id]
+
+    res = await client.post(f"/api/classes/{created['id']}/projects", json=PROJECT_BODY, headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (403, {"error": "Only the class owner can create projects"})
 
 
 async def test_create_class_rules(client):
-    res = await client.post("/api/classes", json={"className": "Hack"}, headers=auth(ALEX))
-    assert (res.status_code, res.json()) == (403, {"error": "Only teachers can create classes"})
     res = await client.post("/api/classes", json={"className": "   "}, headers=auth(MR_DAVIS))
     assert (res.status_code, res.json()) == (400, {"error": "Class name is required"})
 
@@ -154,7 +182,7 @@ async def test_create_project_rules(client):
         (MR_DAVIS, {**PROJECT_BODY, "name": " "}, 400, "Project name is required"),
         (MR_DAVIS, {**PROJECT_BODY, "status": "done"}, 400, "Invalid project status"),
         (MR_DAVIS, {**PROJECT_BODY, "hue": ""}, 400, "Color and hue are required"),
-        (ALEX, PROJECT_BODY, 403, "Only teachers can create projects"),
+        (ALEX, PROJECT_BODY, 403, "Only the class owner can create projects"),
         (MRS_SMITH, PROJECT_BODY, 403, "You are not a member of this class"),
     ]
     for user, body, status, error in cases:

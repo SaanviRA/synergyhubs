@@ -2,8 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Book, Users, ArrowRight } from 'lucide-react';
 
 export default function ClassList({ onSelectClass }) {
-  const [showAddModal, setShowAddModal] = useState(false);
+  // null | 'join' | 'create'
+  const [modalMode, setModalMode] = useState(null);
   const [joinCode, setJoinCode] = useState('');
+  const [classNameInput, setClassNameInput] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [classes, setClasses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -37,12 +41,42 @@ export default function ClassList({ onSelectClass }) {
           throw new Error(errData.error || 'Failed to join class');
         }
         await fetchClasses();
-        setJoinCode('');
-        setShowAddModal(false);
+        handleCloseModal();
       } catch (err) {
         alert(err.message);
       }
     }
+  };
+
+  const handleCreateClass = async () => {
+    if (classNameInput.trim()) {
+      setIsSubmitting(true);
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/classes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ className: classNameInput })
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Failed to create class');
+        }
+        const data = await res.json();
+        setGeneratedCode(data.class.joinCode);
+        await fetchClasses();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const handleCloseModal = () => {
+    setModalMode(null);
+    setJoinCode('');
+    setClassNameInput('');
+    setGeneratedCode('');
   };
 
   return (
@@ -55,13 +89,24 @@ export default function ClassList({ onSelectClass }) {
           <h1 className="text-3xl sm:text-4xl font-heading font-bold text-surface-900 tracking-tight">My Classes</h1>
           <p className="text-surface-600">Select a project to view its workspace.</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="bg-brand-600 text-white p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95"
-        >
-          <Plus size={20} />
-          <span className="hidden sm:inline">Join Class</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setModalMode('create')}
+            title="Create Class"
+            className="bg-white text-brand-700 border border-brand-200 p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-sm hover:bg-brand-50 transition-colors active:scale-95"
+          >
+            <Book size={20} />
+            <span className="hidden sm:inline">Create Class</span>
+          </button>
+          <button 
+            onClick={() => setModalMode('join')}
+            title="Join Class"
+            className="bg-brand-600 text-white p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95"
+          >
+            <Plus size={20} />
+            <span className="hidden sm:inline">Join Class</span>
+          </button>
+        </div>
       </header>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -85,7 +130,7 @@ export default function ClassList({ onSelectClass }) {
             <div className="p-5 space-y-4 relative">
               <div className="flex justify-between items-center text-sm font-medium">
                  <span className="text-surface-600 flex items-center gap-1.5">
-                   Instructor: {cls.teacher} 
+                   {cls.role === 'teacher' ? 'Created by You' : `Instructor: ${cls.teacher}`}
                    <span className="text-surface-300">•</span>
                    <span className="font-mono text-brand-600 font-bold text-xs bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 uppercase tracking-wide">
                      {cls.joinCode}
@@ -120,18 +165,21 @@ export default function ClassList({ onSelectClass }) {
         ))}
       </div>
 
-      {showAddModal && (
+      {modalMode && (
         <div className="fixed inset-0 bg-surface-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
             <div className="p-6 border-b border-surface-100 flex justify-between items-center">
-              <h2 className="text-xl font-heading font-bold text-surface-900">Join a Class</h2>
+              <h2 className="text-xl font-heading font-bold text-surface-900">
+                {modalMode === 'join' ? 'Join a Class' : 'Create a Class'}
+              </h2>
               <button 
-                onClick={() => setShowAddModal(false)} 
+                onClick={handleCloseModal} 
                 className="text-surface-400 hover:text-surface-600 p-1 rounded-md hover:bg-surface-50 transition-colors"
               >
                 ✕
               </button>
             </div>
+            {modalMode === 'join' ? (
             <div className="p-6">
               <label className="block text-sm font-medium text-surface-700 mb-2">Enter Invite Code</label>
               <input 
@@ -150,6 +198,58 @@ export default function ClassList({ onSelectClass }) {
                 Join Project
               </button>
             </div>
+            ) : !generatedCode ? (
+              <div className="p-6">
+                <label className="block text-sm font-medium text-surface-700 mb-2">Class Name</label>
+                <input 
+                  type="text"
+                  autoFocus
+                  value={classNameInput}
+                  onChange={(e) => setClassNameInput(e.target.value)}
+                  placeholder="e.g. Physics Study Group"
+                  className="w-full bg-surface-50 border border-surface-200 rounded-xl p-3 text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 mb-6 font-medium"
+                />
+                <button 
+                  onClick={handleCreateClass}
+                  disabled={!classNameInput.trim() || isSubmitting}
+                  className="w-full bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Class'}
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 space-y-6 text-center">
+                <div className="mx-auto w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center border border-emerald-100 font-bold">
+                  ✓
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-surface-900">Class Created!</h3>
+                  <p className="text-sm text-surface-500">Share this code with classmates to let them join:</p>
+                </div>
+                
+                <div className="bg-surface-50 border border-surface-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2">
+                  <span className="text-2xl font-bold font-mono text-brand-600 tracking-wider select-all uppercase">
+                    {generatedCode}
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedCode);
+                      alert('Copied to clipboard!');
+                    }}
+                    className="text-xs text-brand-500 hover:text-brand-700 font-semibold"
+                  >
+                    Copy Code
+                  </button>
+                </div>
+                
+                <button 
+                  onClick={handleCloseModal}
+                  className="w-full bg-surface-900 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:bg-surface-800 transition-colors active:scale-95"
+                >
+                  Done
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

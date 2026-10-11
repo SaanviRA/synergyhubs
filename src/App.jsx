@@ -102,6 +102,24 @@ function App() {
           />
         );
       }
+      // A student who created the class owns it and can add projects to it
+      if (selectedClass.role === 'teacher') {
+        return (
+          <TeacherProjectList 
+            classData={selectedClass} 
+            isStudentOwner
+            onSelectProject={(proj) => {
+              // Record the visit, as the student project list does
+              fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${proj.id}/visit`, {
+                method: 'POST'
+              }).catch(err => console.error('Error recording project visit:', err));
+              setSelectedProject(proj);
+            }} 
+            onBack={() => setSelectedClass(null)} 
+            onUpdateClass={(updatedClass) => setSelectedClass(updatedClass)}
+          />
+        );
+      }
       return (
         <ProjectList 
           classData={selectedClass} 

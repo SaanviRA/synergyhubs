@@ -35,7 +35,7 @@ class ProjectBody(BaseModel):
 @router.get("", dependencies=[fails_with("Server error fetching classes")])
 async def list_classes(conn: Conn, user: User):
     classes = await conn.fetch(
-        """SELECT c.* FROM classes c
+        """SELECT c.*, cm.role AS member_role FROM classes c
            JOIN class_members cm ON c.id = cm.class_id
            WHERE cm.user_id = $1
            ORDER BY c.id ASC""",
@@ -59,6 +59,7 @@ async def list_classes(conn: Conn, user: User):
             "teacher": cls["teacher"],
             "joinCode": cls["join_code"],
             "color": cls["color"],
+            "role": cls["member_role"],
             "members": member_counts.get(cls["id"], 0),
             "projects": [
                 {key: p[key] for key in ("id", "name", "status", "progress", "color", "hue")}
@@ -109,17 +110,15 @@ async def join_class(body: JoinBody, conn: Conn, user: User):
     return {"success": True, "classId": cls["id"], "name": cls["name"]}
 
 
-# Create a new class (Teacher only)
+# Create a new class. The creator owns it: they hold the 'teacher' class role whatever their account role
 @router.post("", dependencies=[fails_with("Server error creating class")])
 async def create_class(body: ClassBody, conn: Conn, user: User):
     if not body.className or not body.className.strip():
         raise HTTPException(status_code=400, detail="Class name is required")
 
-    teacher = await conn.fetchrow("SELECT name, role FROM users WHERE id = $1", user.id)
-    if teacher is None:
+    creator_name = await conn.fetchval("SELECT name FROM users WHERE id = $1", user.id)
+    if creator_name is None:
         raise HTTPException(status_code=404, detail="User not found")
-    if teacher["role"] != "teacher":
-        raise HTTPException(status_code=403, detail="Only teachers can create classes")
 
     while True:
         join_code = generate_join_code()
@@ -130,7 +129,7 @@ async def create_class(body: ClassBody, conn: Conn, user: User):
         new_class = await conn.fetchrow(
             "INSERT INTO classes (name, teacher, join_code, color) VALUES ($1, $2, $3, $4) RETURNING *",
             body.className.strip(),
-            teacher["name"],
+            creator_name,
             join_code,
             random_class_color(),
         )
@@ -146,7 +145,7 @@ async def create_class(body: ClassBody, conn: Conn, user: User):
     }
 
 
-# Create a new project under a class (Teacher only)
+# Create a new project under a class (class owner only)
 @router.post(
     "/{classId}/projects", status_code=201, dependencies=[fails_with("Server error creating project")]
 )
@@ -164,7 +163,7 @@ async def create_project(classId: int, body: ProjectBody, conn: Conn, user: User
     if member_role is None:
         raise HTTPException(status_code=403, detail="You are not a member of this class")
     if member_role != "teacher":
-        raise HTTPException(status_code=403, detail="Only teachers can create projects")
+        raise HTTPException(status_code=403, detail="Only the class owner can create projects")
 
     async with conn.transaction():
         project = await conn.fetchrow(
@@ -190,11 +189,13 @@ async def create_project(classId: int, body: ProjectBody, conn: Conn, user: User
                     milestone.date or "TBD",
                 )
 
-        # Automatically assign all student members of this class to this new project
+        # Automatically assign all students of this class to this new project,
+        # including a student who owns the class
         await conn.execute(
             """INSERT INTO project_members (project_id, user_id, roles, active_log)
-               SELECT $1, user_id, $3::text[], $4 FROM class_members
-               WHERE class_id = $2 AND role = 'student'
+               SELECT $1, cm.user_id, $3::text[], $4 FROM class_members cm
+               JOIN users u ON u.id = cm.user_id
+               WHERE cm.class_id = $2 AND (cm.role = 'student' OR u.role = 'student')
                ON CONFLICT DO NOTHING""",
             project["id"],
             classId,

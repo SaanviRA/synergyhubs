@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Clock, CalendarHeart, LibraryBig, ArrowRight, Plus, Trash2 } from 'lucide-react';
 
-export default function TeacherProjectList({ classData, onSelectProject, onBack, onUpdateClass }) {
+export default function TeacherProjectList({ classData, onSelectProject, onBack, onUpdateClass, isStudentOwner = false }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [status, setStatus] = useState('present');
@@ -155,11 +155,19 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
 
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 pb-4 border-b border-surface-200">
         <div className="space-y-2">
-          <div className="inline-flex items-center space-x-2 bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-indigo-200">
-            <span>Teacher Portal</span>
-          </div>
+          {isStudentOwner ? (
+            <div className="inline-flex items-center space-x-2 bg-brand-100 text-brand-800 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-brand-200">
+              <span>Your Class</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center space-x-2 bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-indigo-200">
+              <span>Teacher Portal</span>
+            </div>
+          )}
           <h1 className="text-3xl sm:text-4xl font-heading font-bold text-surface-900 tracking-tight">{classData?.name} Projects</h1>
-          <p className="text-surface-600 text-lg">Select a project to view and evaluate workspaces.</p>
+          <p className="text-surface-600 text-lg">
+            {isStudentOwner ? 'Select a project to view its workspace, or create a new one.' : 'Select a project to view and evaluate workspaces.'}
+          </p>
         </div>
         <button 
           onClick={() => setShowCreateModal(true)}
