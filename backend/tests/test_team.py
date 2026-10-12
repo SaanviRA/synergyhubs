@@ -1,6 +1,6 @@
 from app.utils import short_date
 
-from .conftest import ALEX, MR_DAVIS, PROJECT, SARAH, auth
+from .conftest import ALEX, MR_DAVIS, MRS_SMITH, PROJECT, SARAH, auth
 
 BASE = f"/api/projects/{PROJECT}"
 
@@ -11,7 +11,7 @@ async def _roles(conn, user_id):
     )
 
 
-async def test_invite_creates_user_and_adds_them_to_class_and_project(client, conn):
+async def test_invite_creates_user_and_adds_them_to_the_project_only(client, conn):
     res = await client.post(
         f"{BASE}/team/invite", json={"email": " Robin.Hood@Example.com "}, headers=auth(ALEX)
     )
@@ -27,12 +27,7 @@ async def test_invite_creates_user_and_adds_them_to_class_and_project(client, co
             "activeLog": "Just joined the project!",
         },
     }
-    assert (
-        await conn.fetchval(
-            "SELECT role FROM class_members WHERE class_id = 1 AND user_id = $1", member["id"]
-        )
-        == "student"
-    )
+    assert not await conn.fetchval("SELECT 1 FROM class_members WHERE user_id = $1", member["id"])
     team = (await client.get(f"{BASE}/team", headers=auth(ALEX))).json()
     assert team[-1]["email"] == "robin.hood@example.com"
 
@@ -118,3 +113,71 @@ async def test_teacher_sees_all_logs_or_one_students(client):
 
     one = await client.get(f"{BASE}/logs", params={"userId": SARAH["id"]}, headers=auth(MR_DAVIS))
     assert [log["id"] for log in one.json()] == [6, 5]
+
+
+async def test_invited_student_sees_the_project_under_shared_and_can_move_it(client, outsider):
+    res = await client.post(f"{BASE}/team/invite", json={"email": "olive@example.com"}, headers=auth(ALEX))
+    assert res.status_code == 200
+
+    # Only the one project is shared, not the rest of class 1
+    classes = (await client.get("/api/classes", headers=outsider)).json()
+    assert classes == [
+        {
+            "id": "shared",
+            "name": "Shared",
+            "teacher": "",
+            "joinCode": None,
+            "color": "from-slate-500 to-slate-700",
+            "role": "student",
+            "members": 0,
+            "shared": True,
+            "projects": [
+                {
+                    "id": 101,
+                    "name": "Cold War Perspectives",
+                    "status": "present",
+                    "progress": 25,
+                    "color": "from-blue-500 to-indigo-600",
+                    "hue": "blue",
+                    "shared": True,
+                }
+            ],
+        }
+    ]
+    assert (await client.get(f"{BASE}/team", headers=outsider)).status_code == 200
+    assert (await client.get("/api/projects/102", headers=outsider)).status_code == 403
+    # The class itself is unchanged for its members
+    assert (await client.get("/api/classes", headers=auth(ALEX))).json()[0]["members"] == 4
+
+    # Move it into a class of their own: "Shared" empties and disappears
+    own = (await client.post("/api/classes", json={"className": "My Stuff"}, headers=outsider)).json()["class"]
+    res = await client.put(f"{BASE}/class", json={"classId": own["id"]}, headers=outsider)
+    assert (res.status_code, res.json()) == (200, {"success": True, "classId": own["id"]})
+    classes = (await client.get("/api/classes", headers=outsider)).json()
+    assert [(c["id"], [(p["id"], p["shared"]) for p in c["projects"]]) for c in classes] == [
+        (own["id"], [(101, True)])
+    ]
+    # It is still class 1's project for everyone else
+    assert [p["id"] for p in (await client.get("/api/classes", headers=auth(ALEX))).json()[0]["projects"]] == [
+        101,
+        102,
+        103,
+    ]
+    assert (await client.get(f"/api/projects/{PROJECT}", headers=outsider)).json()["classId"] == 1
+
+    # And back to "Shared"
+    res = await client.put(f"{BASE}/class", json={"classId": None}, headers=outsider)
+    assert res.json() == {"success": True, "classId": None}
+    assert [c["id"] for c in (await client.get("/api/classes", headers=outsider)).json()] == [own["id"], "shared"]
+
+
+async def test_move_shared_project_rules(client, outsider):
+    await client.post(f"{BASE}/team/invite", json={"email": "olive@example.com"}, headers=auth(ALEX))
+
+    res = await client.put(f"{BASE}/class", json={"classId": 2}, headers=outsider)
+    assert (res.status_code, res.json()) == (403, {"error": "You are not a member of that class"})
+
+    # Members of the project's own class cannot re-file it
+    res = await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (400, {"error": "Only projects shared with you can be moved"})
+    assert (await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(MRS_SMITH))).status_code == 403

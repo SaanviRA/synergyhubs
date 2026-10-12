@@ -13,6 +13,7 @@ PROTECTED = [
     ("POST", "/api/classes/1/projects"),
     ("GET", f"/api/projects/{PROJECT}"),
     ("POST", f"/api/projects/{PROJECT}/visit"),
+    ("PUT", f"/api/projects/{PROJECT}/class"),
     ("GET", f"/api/projects/{PROJECT}/student-history"),
     ("GET", f"/api/projects/{PROJECT}/team"),
     ("POST", f"/api/projects/{PROJECT}/team/invite"),
@@ -37,6 +38,7 @@ PROTECTED = [
 PROJECT_SCOPED = [
     ("GET", f"/api/projects/{PROJECT}", None),
     ("POST", f"/api/projects/{PROJECT}/visit", None),
+    ("PUT", f"/api/projects/{PROJECT}/class", {"classId": 2}),
     ("GET", f"/api/projects/{PROJECT}/student-history", None),
     ("GET", f"/api/projects/{PROJECT}/team", None),
     ("POST", f"/api/projects/{PROJECT}/team/invite", {"email": "x@example.com"}),

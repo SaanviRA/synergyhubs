@@ -247,7 +247,9 @@ export default function Account({ onBack, onLogout }) {
                   <div>
                     <h3 className="font-bold text-surface-900 text-sm">{cls.name}</h3>
                     <p className="text-xs text-surface-500">
-                      {profile.role === 'teacher' && cls.teacher.trim().toLowerCase() === profile.name.trim().toLowerCase()
+                      {cls.shared
+                        ? 'Projects you were invited to'
+                        : profile.role === 'teacher' && cls.teacher.trim().toLowerCase() === profile.name.trim().toLowerCase()
                         ? 'Taught by You'
                         : `Instructor: ${cls.teacher}`}
                     </p>

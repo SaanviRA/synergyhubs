@@ -1,7 +1,8 @@
 import React from 'react';
 import { ArrowLeft, Clock, CalendarHeart, LibraryBig, ArrowRight } from 'lucide-react';
+import MoveSharedProject from '../components/MoveSharedProject';
 
-export default function ProjectList({ classData, onSelectProject, onBack }) {
+export default function ProjectList({ classData, onSelectProject, onBack, onUpdateClass }) {
   const projects = classData?.projects || [];
   
   const past = projects.filter(p => p.status === 'past');
@@ -47,6 +48,23 @@ export default function ProjectList({ classData, onSelectProject, onBack }) {
     </button>
   );
 
+  // Projects shared with this student get a control to file them under another class
+  const renderProject = (project) => (
+    <div key={project.id} className="space-y-2">
+      <ProjectCard project={project} />
+      {project.shared && (
+        <MoveSharedProject
+          project={project}
+          currentClassId={classData.id}
+          onMoved={(moved) => onUpdateClass({
+            ...classData,
+            projects: projects.filter(p => p.id !== moved.id)
+          })}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div className="pt-6 sm:pt-24 pb-24 px-4 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <button 
@@ -59,7 +77,11 @@ export default function ProjectList({ classData, onSelectProject, onBack }) {
 
       <header className="space-y-2 pb-4 border-b border-surface-200">
         <h1 className="text-3xl sm:text-4xl font-heading font-bold text-surface-900 tracking-tight">{classData?.name} Projects</h1>
-        <p className="text-surface-600 text-lg">Select a project to view its workspace.</p>
+        <p className="text-surface-600 text-lg">
+          {classData?.shared
+            ? 'Projects you were invited to. Open one, or move it into one of your classes.'
+            : 'Select a project to view its workspace.'}
+        </p>
       </header>
 
       {present.length > 0 && (
@@ -68,7 +90,7 @@ export default function ProjectList({ classData, onSelectProject, onBack }) {
             <CalendarHeart className="text-brand-500" /> Active Workspace
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {present.map(p => <ProjectCard key={p.id} project={p} />)}
+            {present.map(renderProject)}
           </div>
         </section>
       )}
@@ -79,7 +101,7 @@ export default function ProjectList({ classData, onSelectProject, onBack }) {
             <LibraryBig className="text-amber-500" /> Upcoming
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {future.map(p => <ProjectCard key={p.id} project={p} />)}
+            {future.map(renderProject)}
           </div>
         </section>
       )}
@@ -90,7 +112,7 @@ export default function ProjectList({ classData, onSelectProject, onBack }) {
             <Clock className="text-surface-500" /> Past Projects
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {past.map(p => <ProjectCard key={p.id} project={p} />)}
+            {past.map(renderProject)}
           </div>
         </section>
       )}

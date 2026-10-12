@@ -62,6 +62,8 @@ CREATE TABLE project_members (
     has_visited BOOLEAN DEFAULT FALSE,
     last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     visit_count INTEGER DEFAULT 0,
+    -- Where a member who is not in the project's class files it ("Shared" when NULL)
+    placed_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
     PRIMARY KEY (project_id, user_id)
 );
 

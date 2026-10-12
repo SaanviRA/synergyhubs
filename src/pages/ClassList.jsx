@@ -129,6 +129,10 @@ export default function ClassList({ onSelectClass }) {
             {/* Bottom details area */}
             <div className="p-5 space-y-4 relative">
               <div className="flex justify-between items-center text-sm font-medium">
+                {cls.shared ? (
+                 <span className="text-surface-600">Projects you were invited to</span>
+                ) : (
+                 <>
                  <span className="text-surface-600 flex items-center gap-1.5">
                    {cls.role === 'teacher' ? 'Created by You' : `Instructor: ${cls.teacher}`}
                    <span className="text-surface-300">•</span>
@@ -140,6 +144,8 @@ export default function ClassList({ onSelectClass }) {
                   <Users size={14} />
                   <span>{cls.members} Members</span>
                 </div>
+                 </>
+                )}
               </div>
               
               <div className="space-y-1.5">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Clock, CalendarHeart, LibraryBig, ArrowRight, Plus, Trash2 } from 'lucide-react';
+import MoveSharedProject from '../components/MoveSharedProject';
 
 export default function TeacherProjectList({ classData, onSelectProject, onBack, onUpdateClass, isStudentOwner = false }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -143,6 +144,23 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
     </button>
   );
 
+  // Projects shared with this student get a control to file them under another class
+  const renderProject = (project) => (
+    <div key={project.id} className="space-y-2">
+      <ProjectCard project={project} />
+      {project.shared && (
+        <MoveSharedProject
+          project={project}
+          currentClassId={classData.id}
+          onMoved={(moved) => onUpdateClass({
+            ...classData,
+            projects: projects.filter(p => p.id !== moved.id)
+          })}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div className="pt-6 sm:pt-24 pb-24 px-4 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <button 
@@ -169,13 +187,15 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
             {isStudentOwner ? 'Select a project to view its workspace, or create a new one.' : 'Select a project to view and evaluate workspaces.'}
           </p>
         </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="bg-brand-600 text-white p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95 cursor-pointer self-stretch sm:self-auto justify-center"
-        >
-          <Plus size={20} />
-          <span>Create Project</span>
-        </button>
+        {!classData?.shared && (
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="bg-brand-600 text-white p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95 cursor-pointer self-stretch sm:self-auto justify-center"
+          >
+            <Plus size={20} />
+            <span>Create Project</span>
+          </button>
+        )}
       </header>
 
       {present.length > 0 && (
@@ -184,7 +204,7 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
             <CalendarHeart className="text-brand-500" /> Active Workspace
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {present.map(p => <ProjectCard key={p.id} project={p} />)}
+            {present.map(renderProject)}
           </div>
         </section>
       )}
@@ -195,7 +215,7 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
             <LibraryBig className="text-amber-500" /> Upcoming
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {future.map(p => <ProjectCard key={p.id} project={p} />)}
+            {future.map(renderProject)}
           </div>
         </section>
       )}
@@ -206,7 +226,7 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
             <Clock className="text-surface-500" /> Past Projects
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {past.map(p => <ProjectCard key={p.id} project={p} />)}
+            {past.map(renderProject)}
           </div>
         </section>
       )}

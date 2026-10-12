@@ -51,6 +51,11 @@ END $$;
 ALTER TABLE project_members
     ADD COLUMN IF NOT EXISTS last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
+-- 2b. Let a member who was invited to a single project (and is not in its class) file it
+--     under one of their own classes. NULL keeps it in their "Shared" class.
+ALTER TABLE project_members
+    ADD COLUMN IF NOT EXISTS placed_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

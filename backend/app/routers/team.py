@@ -60,7 +60,7 @@ async def get_team(projectId: int, conn: Conn, user: User):
     ]
 
 
-# Invite a teammate by email
+# Invite a teammate to this project by email
 @router.post("/team/invite", dependencies=[fails_with("Server error inviting teammate"), ProjectAccess])
 async def invite_teammate(projectId: int, body: InviteBody, conn: Conn):
     email = (body.email or "").strip().lower()
@@ -78,14 +78,7 @@ async def invite_teammate(projectId: int, body: InviteBody, conn: Conn):
                 name_part[:2].upper(),
             )
 
-        # Add to class if not member
-        await conn.execute(
-            """INSERT INTO class_members (class_id, user_id, role)
-               SELECT class_id, $2, 'student' FROM projects WHERE id = $1
-               ON CONFLICT DO NOTHING""",
-            projectId,
-            invited["id"],
-        )
+        # Only the project is shared: the invitee does not join the rest of the class
         await conn.execute(
             """INSERT INTO project_members (project_id, user_id, roles, active_log)
                VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING""",

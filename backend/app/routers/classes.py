@@ -8,6 +8,19 @@ from ..utils import generate_join_code, random_class_color
 router = APIRouter(prefix="/api/classes", route_class=SafeRoute)
 
 PROJECT_STATUSES = ("present", "past", "future")
+PROJECT_FIELDS = ("id", "name", "status", "progress", "color", "hue")
+
+# Pseudo-class holding projects the caller was invited to without belonging to their class
+SHARED_CLASS = {
+    "id": "shared",
+    "name": "Shared",
+    "teacher": "",
+    "joinCode": None,
+    "color": "from-slate-500 to-slate-700",
+    "role": "student",
+    "members": 0,
+    "shared": True,
+}
 
 
 class JoinBody(BaseModel):
@@ -52,7 +65,27 @@ async def list_classes(conn: Conn, user: User):
     )
     member_counts = {row["class_id"]: row["member_count"] for row in members}
 
-    return [
+    # Projects the caller was invited to individually. They sit in "Shared" until the caller
+    # files them under one of their own classes.
+    shared = await conn.fetch(
+        """SELECT p.*, pm.placed_class_id FROM projects p
+           JOIN project_members pm ON pm.project_id = p.id
+           WHERE pm.user_id = $1 AND NOT (p.class_id = ANY($2::int[]))
+           ORDER BY p.id ASC""",
+        user.id,
+        class_ids,
+    )
+
+    projects_by_class: dict[int | None, list[dict]] = {}
+    for p in projects:
+        projects_by_class.setdefault(p["class_id"], []).append({key: p[key] for key in PROJECT_FIELDS})
+    for p in shared:
+        placed = p["placed_class_id"] if p["placed_class_id"] in class_ids else None
+        projects_by_class.setdefault(placed, []).append(
+            {**{key: p[key] for key in PROJECT_FIELDS}, "shared": True}
+        )
+
+    result = [
         {
             "id": cls["id"],
             "name": cls["name"],
@@ -61,14 +94,13 @@ async def list_classes(conn: Conn, user: User):
             "color": cls["color"],
             "role": cls["member_role"],
             "members": member_counts.get(cls["id"], 0),
-            "projects": [
-                {key: p[key] for key in ("id", "name", "status", "progress", "color", "hue")}
-                for p in projects
-                if p["class_id"] == cls["id"]
-            ],
+            "projects": projects_by_class.get(cls["id"], []),
         }
         for cls in classes
     ]
+    if None in projects_by_class:
+        result.append({**SHARED_CLASS, "projects": projects_by_class[None]})
+    return result
 
 
 # Join a class using an invite code
