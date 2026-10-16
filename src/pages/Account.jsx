@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Mail, School, Check, Book, Loader2, LogOut } from 'lucide-react';
+import { ArrowLeft, User, Mail, School, Check, Book, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 
-export default function Account({ onBack, onLogout }) {
+export default function Account({ onBack, onLogout, onOpenAdmin }) {
   const [profile, setProfile] = useState({ name: '', email: '', avatar: '' });
   const [classes, setClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -121,6 +121,17 @@ export default function Account({ onBack, onLogout }) {
           </div>
         </div>
 
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2 z-10">
+        {profile.is_admin && (
+          <button
+            onClick={onOpenAdmin}
+            className="w-full sm:w-auto bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 hover:border-amber-300 px-5 py-2.5 rounded-2xl font-bold transition-all duration-200 active:scale-95 text-sm cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow"
+          >
+            <ShieldCheck size={16} />
+            <span>Manage Users</span>
+          </button>
+        )}
+
         {/* Prominent Header Logout Button */}
         <button
           onClick={onLogout}
@@ -129,6 +140,7 @@ export default function Account({ onBack, onLogout }) {
           <LogOut size={16} />
           <span>Log Out</span>
         </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

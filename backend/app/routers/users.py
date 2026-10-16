@@ -15,7 +15,7 @@ class ProfileBody(BaseModel):
 
 @router.get("/me", dependencies=[fails_with("Server error fetching profile")])
 async def get_me(conn: Conn, user: User):
-    row = await conn.fetchrow("SELECT id, name, email, avatar, role, is_me FROM users WHERE id = $1", user.id)
+    row = await conn.fetchrow("SELECT id, name, email, avatar, role, is_me, is_admin FROM users WHERE id = $1", user.id)
     if row is None:
         raise HTTPException(status_code=404, detail="User not found")
     return dict(row)
@@ -27,7 +27,7 @@ async def update_me(body: ProfileBody, conn: Conn, user: User):
         raise HTTPException(status_code=400, detail="Name and email are required")
     try:
         row = await conn.fetchrow(
-            "UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, avatar, role, is_me",
+            "UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, avatar, role, is_me, is_admin",
             body.name.strip(),
             body.email.strip().lower(),
             user.id,

@@ -2,6 +2,8 @@ import pytest
 
 from app.routers import auth as auth_router
 
+from app.access import PENDING_APPROVAL
+
 from .conftest import ALEX, auth
 
 SIGNUP = {"name": "Nina New", "email": "  Nina@Example.com ", "password": "password123"}
@@ -12,9 +14,24 @@ async def test_health_is_public(client):
     assert res.status_code == 200 and res.json() == {"status": "ok"}
 
 
-async def test_signup_then_login(client):
+PENDING = {"pending": True, "message": PENDING_APPROVAL}
+
+
+async def test_signup_waits_for_approval_then_login(client, conn):
     res = await client.post("/api/auth/signup", json=SIGNUP)
-    assert res.status_code == 201
+    assert (res.status_code, res.json()) == (201, PENDING)
+
+    # Until an admin approves the account, logging in hands out no token
+    credentials = {"email": "NINA@example.com", "password": "password123"}
+    res = await client.post("/api/auth/login", json=credentials)
+    assert (res.status_code, res.json()) == (200, PENDING)
+    # A wrong password is still just wrong, without revealing the account is pending
+    res = await client.post("/api/auth/login", json={**credentials, "password": "wrong-password"})
+    assert res.status_code == 401
+
+    await conn.execute("UPDATE users SET approved = TRUE WHERE email = 'nina@example.com'")
+    res = await client.post("/api/auth/login", json=credentials)
+    assert res.status_code == 200
     user = res.json()["user"]
     assert user == {
         "id": user["id"],
@@ -24,13 +41,19 @@ async def test_signup_then_login(client):
         "role": "student",
     }
 
-    res = await client.post("/api/auth/login", json={"email": "NINA@example.com", "password": "password123"})
-    assert res.status_code == 200
-    assert res.json()["user"] == user
-
     me = await client.get("/api/users/me", headers={"Authorization": f"Bearer {res.json()['token']}"})
     assert me.status_code == 200
-    assert me.json() == {**user, "is_me": False}
+    assert me.json() == {**user, "is_me": False, "is_admin": False}
+
+
+async def test_tokens_stop_working_once_an_account_is_unapproved_or_deleted(client, conn):
+    await conn.execute("UPDATE users SET approved = FALSE WHERE id = $1", ALEX["id"])
+    res = await client.get("/api/classes", headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (403, {"error": PENDING_APPROVAL})
+
+    await conn.execute("DELETE FROM users WHERE id = $1", ALEX["id"])
+    res = await client.get("/api/classes", headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (401, {"error": "Your account no longer exists"})
 
 
 @pytest.mark.parametrize(
@@ -48,11 +71,36 @@ async def test_signup_validation(client, body, status, error):
     assert (res.status_code, res.json()) == (status, {"error": error})
 
 
-async def test_same_email_can_register_once_per_role(client):
+async def test_same_email_can_register_once_per_role(client, conn):
     res = await client.post("/api/auth/signup", json={**SIGNUP, "email": ALEX["email"], "role": "teacher"})
     assert res.status_code == 201
-    assert res.json()["user"]["role"] == "teacher"
+    roles = await conn.fetch("SELECT role FROM users WHERE email = $1 ORDER BY id", ALEX["email"])
+    assert [r["role"] for r in roles] == ["student", "teacher"]
 
+
+
+async def test_invited_email_can_sign_up_and_keeps_the_invited_project(client, conn):
+    await client.post("/api/projects/101/team/invite", json={"email": "nina@example.com"}, headers=auth(ALEX))
+    invited_id = await conn.fetchval("SELECT id FROM users WHERE email = 'nina@example.com'")
+
+    res = await client.post("/api/auth/signup", json=SIGNUP)
+    assert (res.status_code, res.json()) == (201, PENDING)
+    account = await conn.fetchrow("SELECT * FROM users WHERE email = 'nina@example.com'")
+    assert (account["id"], account["name"], account["avatar"], account["approved"]) == (
+        invited_id,
+        "Nina New",
+        "NN",
+        False,
+    )
+    assert await conn.fetchval("SELECT 1 FROM project_members WHERE project_id = 101 AND user_id = $1", invited_id)
+
+    # Once claimed, the email is taken like any other
+    res = await client.post("/api/auth/signup", json=SIGNUP)
+    assert (res.status_code, res.json()) == (409, {"error": "An account with this email already exists as a student"})
+
+    await conn.execute("UPDATE users SET approved = TRUE WHERE id = $1", invited_id)
+    res = await client.post("/api/auth/login", json={"email": "nina@example.com", "password": "password123"})
+    assert res.json()["user"]["id"] == invited_id
 
 async def test_login_failures(client):
     await client.post("/api/auth/signup", json=SIGNUP)
@@ -104,15 +152,17 @@ async def test_google_login_creates_then_reuses_the_account(client, conn, monkey
 
     monkeypatch.setattr(auth_router, "verify_google_token", fake_verify)
 
+    # A new Google account also waits for approval
     first = await client.post("/api/auth/google", json={"idToken": "tok", "role": "teacher"})
-    assert first.status_code == 200
-    assert first.json()["user"]["email"] == "gina@example.com"
-    assert first.json()["user"]["role"] == "teacher"
+    assert (first.status_code, first.json()) == (200, PENDING)
     # The token audience is always pinned to our client ID
     assert seen == {"token": "tok", "client_id": "test-client-id.apps.googleusercontent.com"}
 
+    await conn.execute("UPDATE users SET approved = TRUE WHERE google_id = 'google-123'")
     second = await client.post("/api/auth/google", json={"idToken": "tok", "role": "teacher"})
-    assert second.json()["user"] == first.json()["user"]
+    assert second.json()["user"]["email"] == "gina@example.com"
+    assert second.json()["user"]["role"] == "teacher"
+    assert "token" in second.json()
     assert await conn.fetchval("SELECT COUNT(*) FROM users WHERE google_id = 'google-123'") == 1
 
 

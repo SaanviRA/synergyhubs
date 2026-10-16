@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, User, AlertCircle, Eye, EyeOff, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, Eye, EyeOff, Loader2, ArrowRight, ArrowLeft, Clock } from 'lucide-react';
+import LegalLinks from '../components/LegalLinks';
 
 export default function Login({ role, onBackToRole, onAuthSuccess }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Shown when the account exists but an admin has not approved it yet
+  const [notice, setNotice] = useState('');
   
   // Form fields
   const [name, setName] = useState('');
@@ -59,6 +62,10 @@ export default function Login({ role, onBackToRole, onAuthSuccess }) {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Google login failed');
+      if (data.pending) {
+        setNotice(data.message);
+        return;
+      }
 
       // Save credentials & notify parent
       localStorage.setItem('authToken', data.token);
@@ -74,6 +81,7 @@ export default function Login({ role, onBackToRole, onAuthSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
 
     // Quick client-side checks
     if (isSignUp && password !== confirmPassword) {
@@ -96,6 +104,11 @@ export default function Login({ role, onBackToRole, onAuthSuccess }) {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Authentication failed');
+      if (data.pending) {
+        setNotice(data.message);
+        setIsSignUp(false);
+        return;
+      }
 
       // Save token and notify parent
       localStorage.setItem('authToken', data.token);
@@ -140,6 +153,14 @@ export default function Login({ role, onBackToRole, onAuthSuccess }) {
             }
           </p>
         </div>
+
+        {/* Waiting-for-approval notification */}
+        {notice && (
+          <div className="flex items-start gap-2 bg-amber-50 text-amber-800 px-4 py-3 rounded-xl border border-amber-100 text-xs font-semibold">
+            <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{notice}</span>
+          </div>
+        )}
 
         {/* Error notification */}
         {error && (
@@ -263,6 +284,8 @@ export default function Login({ role, onBackToRole, onAuthSuccess }) {
             {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
           </button>
         </div>
+
+        <LegalLinks />
 
       </div>
     </div>

@@ -12,6 +12,7 @@ async def test_profile_read_and_update(client):
         "avatar": "AM",
         "role": "student",
         "is_me": False,
+        "is_admin": False,
     }
 
     res = await client.put(
@@ -31,9 +32,9 @@ async def test_profile_email_cannot_collide_with_another_account(client):
     assert (res.status_code, res.json()) == (409, {"error": "An account with this email already exists"})
 
 
-async def test_deleted_user_token_gets_404(client):
+async def test_deleted_user_token_is_rejected(client):
     res = await client.get("/api/users/me", headers=auth({"id": 99999, "name": "Ghost", "email": "g@x.co"}))
-    assert (res.status_code, res.json()) == (404, {"error": "User not found"})
+    assert (res.status_code, res.json()) == (401, {"error": "Your account no longer exists"})
 
 
 async def test_list_classes_only_returns_the_callers_classes(client, outsider):

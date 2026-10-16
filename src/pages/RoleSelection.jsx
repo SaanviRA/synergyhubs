@@ -1,5 +1,6 @@
 import React from 'react';
 import { GraduationCap, Presentation } from 'lucide-react';
+import LegalLinks from '../components/LegalLinks';
 
 export default function RoleSelection({ onSelectRole }) {
   return (
@@ -15,8 +16,13 @@ export default function RoleSelection({ onSelectRole }) {
         {/* Branding header */}
         <div className="space-y-3">
           <h1 className="text-4xl font-heading font-black tracking-tight bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 bg-clip-text text-transparent">
-            Welcome to GroupHub
+            Welcome to SynergyHubs
           </h1>
+          <p className="text-base text-surface-600 max-w-lg mx-auto">
+            SynergyHubs helps students and teachers run class group projects in one place: organize classes,
+            build project teams, track milestones and submissions, share resources and workspaces, and post
+            progress updates.
+          </p>
           <p className="text-base text-surface-500 max-w-md mx-auto font-medium">
             To get started, please select your primary role. This helps us customize your collaboration dashboard.
           </p>
@@ -74,9 +80,16 @@ export default function RoleSelection({ onSelectRole }) {
         </div>
 
         {/* Footer info */}
-        <p className="text-xs text-surface-400 font-medium">
-          Already have an account? Your chosen role will be verified when you sign in.
-        </p>
+        <div className="space-y-3">
+          <p className="text-xs text-surface-400 font-medium">
+            Already have an account? Your chosen role will be verified when you sign in.
+          </p>
+          <p className="text-xs text-surface-500 max-w-lg mx-auto leading-relaxed">
+            You can sign in with Google, which shares your name, email and profile picture with SynergyHubs. Google
+            Drive is used only to attach files you choose; SynergyHubs cannot see the rest of your Drive.
+          </p>
+          <LegalLinks />
+        </div>
 
       </div>
     </div>

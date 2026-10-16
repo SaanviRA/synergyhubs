@@ -251,6 +251,26 @@ To avoid "Access Blocked" or "Error 400" screens, complete the following in the
 
 ---
 
+## Admins and account approval
+
+New accounts cannot sign in until an admin approves them. Admins do this in the app under
+**Account > Manage Users**, where they can also delete accounts.
+
+Make the first admin from the database. Sign up in the app first, then:
+
+```bash
+sudo docker exec -it group_app_postgres psql -U pguser -d group_app_db
+```
+```sql
+SELECT id, name, email, role, approved FROM users WHERE email = 'you@synergyhubs.org';
+UPDATE users SET is_admin = TRUE, approved = TRUE WHERE id = <id>;
+```
+
+Admin status is only granted this way, never by email, so signing up with an admin's address does not
+make someone an admin. Admin accounts cannot be deleted from the Manage Users page.
+
+---
+
 ## Maintenance & Logs
 
 * **API status and logs**:

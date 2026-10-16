@@ -20,6 +20,9 @@ CREATE TABLE users (
     avatar_url TEXT DEFAULT NULL,
     is_me BOOLEAN DEFAULT FALSE,
     role VARCHAR(50) DEFAULT 'student' CHECK (role IN ('student', 'teacher')),
+    -- New accounts cannot sign in until an admin approves them
+    approved BOOLEAN NOT NULL DEFAULT FALSE,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -130,6 +133,8 @@ INSERT INTO users (id, name, email, avatar, password_hash, is_me, role) VALUES
 (3, 'You', 'saanvi@school.edu', 'JD', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', TRUE, 'student'),
 (4, 'Mr. Davis', 'davis@school.edu', 'MD', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', FALSE, 'teacher'),
 (5, 'Mrs. Smith', 'smith@school.edu', 'MS', '$2b$10$qTMu4Y8CHtyrUeIn8I2TION5OUJ8ajaKilJKBsjVt6BD6lSvDTk8e', FALSE, 'teacher');
+
+UPDATE users SET approved = TRUE;
 
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 

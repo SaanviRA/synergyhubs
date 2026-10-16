@@ -32,6 +32,9 @@ PROTECTED = [
     ("GET", f"/api/projects/{PROJECT}/workspaces"),
     ("POST", f"/api/projects/{PROJECT}/workspaces"),
     ("DELETE", "/api/workspaces/1"),
+    ("GET", "/api/admin/users"),
+    ("POST", "/api/admin/users/1/approve"),
+    ("DELETE", "/api/admin/users/1"),
 ]
 
 # Requests an authenticated user with no link to class 1 / project 101 must not be able to make

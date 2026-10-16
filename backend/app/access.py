@@ -7,7 +7,21 @@ from .db import get_conn
 from .security import CurrentUser, current_user
 
 Conn = Annotated[asyncpg.Connection, Depends(get_conn)]
-User = Annotated[CurrentUser, Depends(current_user)]
+
+PENDING_APPROVAL = "Your account is waiting for approval by an administrator. Please check back later."
+
+
+async def active_user(conn: Conn, user: Annotated[CurrentUser, Depends(current_user)]) -> CurrentUser:
+    """A valid token is not enough: the account must still exist and be approved."""
+    approved = await conn.fetchval("SELECT approved FROM users WHERE id = $1", user.id)
+    if approved is None:
+        raise HTTPException(status_code=401, detail="Your account no longer exists")
+    if not approved:
+        raise HTTPException(status_code=403, detail=PENDING_APPROVAL)
+    return user
+
+
+User = Annotated[CurrentUser, Depends(active_user)]
 
 
 async def ensure_project_access(conn: asyncpg.Connection, project_id: int, user_id: int) -> None:

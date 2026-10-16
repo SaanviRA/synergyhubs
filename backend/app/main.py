@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .db import create_pool
 from .errors import register_error_handlers
-from .routers import auth, classes, milestones, projects, resources, team, users, workspaces
-from .security import current_user
+from .access import active_user
+from .routers import admin, auth, classes, milestones, projects, resources, team, users, workspaces
 
 logging.basicConfig(level=logging.INFO)
 
@@ -37,9 +37,9 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth.router)
-    # Everything outside /api/auth requires a valid token
-    for module in (users, classes, projects, team, milestones, resources, workspaces):
-        app.include_router(module.router, dependencies=[Depends(current_user)])
+    # Everything outside /api/auth requires a valid token for an approved account
+    for module in (users, classes, projects, team, milestones, resources, workspaces, admin):
+        app.include_router(module.router, dependencies=[Depends(active_user)])
 
     return app
 

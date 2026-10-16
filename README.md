@@ -83,7 +83,11 @@ backend/
 
 ### Access rules
 
-- Every endpoint except `/api/auth/*` and `/api/health` requires `Authorization: Bearer <token>`.
+- Every endpoint except `/api/auth/*` and `/api/health` requires `Authorization: Bearer <token>` for an
+  account that still exists and is approved.
+- New accounts (email sign-up and Google) start unapproved: signing in returns `{"pending": true}` and no
+  token until an admin approves them on the Manage Users page (Account > Manage Users).
+- `/api/admin/*` is limited to accounts with `users.is_admin`; admins approve and delete accounts.
 - Project endpoints require the caller to be a member of the project or of its class.
 - Anyone can create a class; its creator owns it and is the only one who can add projects to it.
 - Only teachers can view student history or read another user's work logs.

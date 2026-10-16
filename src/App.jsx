@@ -19,6 +19,7 @@ import TeacherMilestones from './pages/TeacherMilestones';
 import TeacherResources from './pages/TeacherResources';
 import TeacherWorkspaces from './pages/TeacherWorkspaces';
 import TeacherTeam from './pages/TeacherTeam';
+import AdminUsers from './pages/AdminUsers';
 
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [showAccount, setShowAccount] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [userAvatar, setUserAvatar] = useState('JD');
   const [selectedRole, setSelectedRole] = useState(() => {
     return localStorage.getItem('selectedRole') || null;
@@ -75,13 +77,23 @@ function App() {
     setUser(null);
     setSelectedRole(null);
     setShowAccount(false);
+    setShowAdmin(false);
     setSelectedClass(null);
     setSelectedProject(null);
   };
 
   const renderContent = () => {
+    if (showAccount && showAdmin) {
+      return <AdminUsers onBack={() => setShowAdmin(false)} />;
+    }
     if (showAccount) {
-      return <Account onBack={() => setShowAccount(false)} onLogout={handleLogout} />;
+      return (
+        <Account
+          onBack={() => setShowAccount(false)}
+          onLogout={handleLogout}
+          onOpenAdmin={() => setShowAdmin(true)}
+        />
+      );
     }
 
     if (!selectedClass) {

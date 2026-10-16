@@ -96,11 +96,11 @@ async def client(conn):
 
 
 @pytest.fixture
-async def outsider(client):
-    """A freshly registered student who belongs to no class or project."""
-    res = await client.post(
-        "/api/auth/signup",
-        json={"name": "Olive Outsider", "email": "olive@example.com", "password": "password123"},
-    )
+async def outsider(client, conn):
+    """A freshly registered (and approved) student who belongs to no class or project."""
+    account = {"email": "olive@example.com", "password": "password123"}
+    res = await client.post("/api/auth/signup", json={"name": "Olive Outsider", **account})
     assert res.status_code == 201
+    await conn.execute("UPDATE users SET approved = TRUE WHERE email = $1", account["email"])
+    res = await client.post("/api/auth/login", json=account)
     return {"Authorization": f"Bearer {res.json()['token']}"}

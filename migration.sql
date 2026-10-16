@@ -26,6 +26,21 @@ BEGIN
     END IF;
 END $$;
 
+-- 1b. Account approval and admins. Accounts that exist when approval is introduced are
+--     approved once, when the column is first created; every later account starts unapproved.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'approved'
+    ) THEN
+        ALTER TABLE users ADD COLUMN approved BOOLEAN NOT NULL DEFAULT FALSE;
+        UPDATE users SET approved = TRUE;
+    END IF;
+END $$;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- 2. Add visit tracking columns to project_members table.
 --    Members that predate visit tracking are backfilled as visited, once, when the
 --    column is first created. Re-running this script never resets visit status.
