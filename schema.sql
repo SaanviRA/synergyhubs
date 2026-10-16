@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS projects CASCADE;
 DROP TABLE IF EXISTS class_members CASCADE;
 DROP TABLE IF EXISTS classes CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS app_settings CASCADE;
 
 -- 1. USERS Table
 CREATE TABLE users (
@@ -24,6 +25,14 @@ CREATE TABLE users (
     approved BOOLEAN NOT NULL DEFAULT FALSE,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 1b. APP_SETTINGS Table: site-wide switches that admins change from the app
+CREATE TABLE app_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value BOOLEAN NOT NULL,
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 2. CLASSES Table

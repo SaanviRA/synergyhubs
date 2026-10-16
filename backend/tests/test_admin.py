@@ -72,7 +72,12 @@ async def test_admin_cannot_delete_themselves_or_another_admin(client, conn, adm
 
 @pytest.mark.parametrize(
     ("method", "path"),
-    [("GET", "/api/admin/users"), ("POST", "/api/admin/users/2/approve"), ("DELETE", "/api/admin/users/2")],
+    [
+        ("GET", "/api/admin/users"),
+        ("POST", "/api/admin/users/2/approve"),
+        ("DELETE", "/api/admin/users/2"),
+        ("GET", "/api/admin/settings"),
+    ],
 )
 async def test_non_admins_are_refused(client, conn, method, path):
     res = await client.request(method, path, headers=auth(ALEX))
@@ -82,3 +87,59 @@ async def test_non_admins_are_refused(client, conn, method, path):
 
 async def test_profile_shows_admin_flag(client, admin):
     assert (await client.get("/api/users/me", headers=admin)).json()["is_admin"] is True
+
+
+async def _set_auto_approve(client, headers, enabled, confirmation):
+    return await client.put(
+        "/api/admin/settings/auto-approve",
+        json={"enabled": enabled, "confirmation": confirmation},
+        headers=headers,
+    )
+
+
+async def test_auto_approve_is_off_by_default(client, admin):
+    assert (await client.get("/api/admin/settings", headers=admin)).json() == {"autoApprove": False}
+
+
+async def test_auto_approve_needs_the_matching_confirmation_word(client, admin):
+    for enabled, word in [(True, None), (True, "enable"), (True, "DISABLE"), (False, "ENABLE"), (False, "")]:
+        res = await _set_auto_approve(client, admin, enabled, word)
+        expected = "ENABLE" if enabled else "DISABLE"
+        assert (res.status_code, res.json()) == (400, {"error": f"Type {expected} to confirm"})
+    assert (await client.get("/api/admin/settings", headers=admin)).json() == {"autoApprove": False}
+
+
+async def test_auto_approve_approves_new_signups_until_turned_off(client, conn, admin):
+    waiting_id = await _signup(client, conn, "early@example.com")
+
+    res = await _set_auto_approve(client, admin, True, "ENABLE")
+    assert res.json() == {"autoApprove": True}
+    assert (await client.get("/api/admin/settings", headers=admin)).json() == {"autoApprove": True}
+    assert await conn.fetchval("SELECT updated_by FROM app_settings") == MR_DAVIS["id"]
+
+    res = await client.post(
+        "/api/auth/signup", json={"name": "Quick Start", "email": "quick@example.com", "password": "password123"}
+    )
+    assert "token" in res.json()
+    # Accounts that were already waiting are left for an admin to approve
+    assert not await conn.fetchval("SELECT approved FROM users WHERE id = $1", waiting_id)
+
+    # An invited placeholder signing up is a new account too
+    await client.post("/api/projects/101/team/invite", json={"email": "ivy@example.com"}, headers=auth(ALEX))
+    res = await client.post(
+        "/api/auth/signup", json={"name": "Ivy", "email": "ivy@example.com", "password": "password123"}
+    )
+    assert "token" in res.json()
+
+    res = await _set_auto_approve(client, admin, False, "DISABLE")
+    assert res.json() == {"autoApprove": False}
+    res = await client.post(
+        "/api/auth/signup", json={"name": "Late", "email": "late@example.com", "password": "password123"}
+    )
+    assert res.json()["pending"] is True
+
+
+async def test_non_admins_cannot_change_auto_approve(client, conn):
+    res = await _set_auto_approve(client, auth(ALEX), True, "ENABLE")
+    assert (res.status_code, res.json()) == (403, {"error": "Admin access required"})
+    assert await conn.fetchval("SELECT COUNT(*) FROM app_settings") == 0

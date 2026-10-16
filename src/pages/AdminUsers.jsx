@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Check, Trash2, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, Loader2, ShieldCheck, X } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
@@ -10,6 +10,11 @@ export default function AdminUsers({ onBack }) {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [busyId, setBusyId] = useState(null);
+  const [autoApprove, setAutoApprove] = useState(null);
+  // The value being switched to while the confirmation dialog is open
+  const [pendingAutoApprove, setPendingAutoApprove] = useState(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [isSavingSetting, setIsSavingSetting] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -24,9 +29,55 @@ export default function AdminUsers({ onBack }) {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/settings`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch settings');
+      setAutoApprove(data.autoApprove);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchSettings();
   }, []);
+
+  const confirmWord = pendingAutoApprove ? 'ENABLE' : 'DISABLE';
+
+  const openAutoApproveDialog = () => {
+    setConfirmText('');
+    setPendingAutoApprove(!autoApprove);
+  };
+
+  const closeAutoApproveDialog = () => {
+    if (isSavingSetting) return;
+    setPendingAutoApprove(null);
+    setConfirmText('');
+  };
+
+  const saveAutoApprove = async () => {
+    if (confirmText !== confirmWord || isSavingSetting) return;
+    setIsSavingSetting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/settings/auto-approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: pendingAutoApprove, confirmation: confirmText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update setting');
+      setAutoApprove(data.autoApprove);
+      setPendingAutoApprove(null);
+      setConfirmText('');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSavingSetting(false);
+    }
+  };
 
   const runAction = async (user, method, path) => {
     setBusyId(user.id);
@@ -72,8 +123,38 @@ export default function AdminUsers({ onBack }) {
           <span>Admin</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-heading font-bold text-surface-900 tracking-tight">Manage Users</h1>
-        <p className="text-surface-600">New accounts cannot sign in until you approve them.</p>
+        <p className="text-surface-600">
+          {autoApprove
+            ? 'New accounts are approved automatically and can sign in right away.'
+            : 'New accounts cannot sign in until you approve them.'}
+        </p>
       </header>
+
+      <div className="bg-white rounded-2xl border border-surface-200 p-4 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-bold text-surface-900">Auto-approve new accounts</p>
+          <p className="text-sm text-surface-600">
+            When on, anyone who signs up can use the app immediately. Accounts already waiting still need your approval.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={!!autoApprove}
+          aria-label="Auto-approve new accounts"
+          onClick={openAutoApproveDialog}
+          disabled={autoApprove === null}
+          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+            autoApprove ? 'bg-emerald-600' : 'bg-surface-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              autoApprove ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
 
       <div className="flex gap-2">
         {[['pending', `Waiting for approval (${pendingCount})`], ['all', `All users (${users.length})`]].map(([key, label]) => (
@@ -155,6 +236,61 @@ export default function AdminUsers({ onBack }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {pendingAutoApprove !== null && (
+        <div className="fixed inset-0 bg-surface-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6 border-b border-surface-100 flex justify-between items-center">
+              <h2 className="text-xl font-heading font-bold text-surface-900">
+                {pendingAutoApprove ? 'Turn on auto-approve?' : 'Turn off auto-approve?'}
+              </h2>
+              <button onClick={closeAutoApproveDialog} className="text-surface-400 hover:text-surface-600" aria-label="Close">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-surface-600 mb-4">
+                {pendingAutoApprove
+                  ? 'Everyone who signs up from now on can sign in without waiting for an admin.'
+                  : 'New accounts will wait for an admin to approve them again.'}
+              </p>
+              <label htmlFor="auto-approve-confirm" className="block text-sm font-medium text-surface-700 mb-2">
+                Type <span className="font-mono font-bold text-surface-900">{confirmWord}</span> to confirm
+              </label>
+              <input
+                id="auto-approve-confirm"
+                type="text"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveAutoApprove()}
+                className="w-full bg-surface-50 border border-surface-200 rounded-xl p-3 font-mono text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 mb-6"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={closeAutoApproveDialog}
+                  disabled={isSavingSetting}
+                  className="flex-1 border border-surface-200 text-surface-700 hover:bg-surface-50 disabled:opacity-50 px-4 py-3 rounded-xl font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveAutoApprove}
+                  disabled={confirmText !== confirmWord || isSavingSetting}
+                  className={`flex-1 flex items-center justify-center gap-2 text-white px-4 py-3 rounded-xl font-medium transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    pendingAutoApprove ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {isSavingSetting && <Loader2 size={16} className="animate-spin" />}
+                  <span>{pendingAutoApprove ? 'Turn on' : 'Turn off'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

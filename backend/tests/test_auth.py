@@ -239,3 +239,10 @@ async def test_error_responses_still_carry_cors_headers(client):
     res = await client.get("/api/users/me", headers={"Origin": "http://localhost:5173"})
     assert res.status_code == 401
     assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+async def test_google_signup_is_approved_when_auto_approve_is_on(client, conn, monkeypatch):
+    monkeypatch.setattr(auth_router, "verify_google_token", lambda token, client_id: _google_payload())
+    await conn.execute("INSERT INTO app_settings (key, value) VALUES ('auto_approve_signups', TRUE)")
+    res = await client.post("/api/auth/google", json={"idToken": "tok", "role": "teacher"})
+    assert "token" in res.json()

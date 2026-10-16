@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
-from ..access import Conn, User
+from ..access import AUTO_APPROVE, Conn, User, auto_approve_enabled
 from ..errors import SafeRoute, fails_with
 from ..utils import iso_z
 
@@ -62,3 +63,32 @@ async def delete_user(userId: int, conn: Conn, user: User):
         raise HTTPException(status_code=400, detail="Admin accounts cannot be deleted here")
     await conn.execute("DELETE FROM users WHERE id = $1", userId)
     return {"success": True}
+
+
+class AutoApproveBody(BaseModel):
+    enabled: bool
+    # Must be exactly ENABLE when turning on and DISABLE when turning off
+    confirmation: str | None = None
+
+
+@router.get("/settings", dependencies=[fails_with("Server error fetching settings")])
+async def read_settings(conn: Conn):
+    return {"autoApprove": await auto_approve_enabled(conn)}
+
+
+# Turning auto-approve on approves new sign-ups from then on; accounts already waiting stay pending
+@router.put("/settings/auto-approve", dependencies=[fails_with("Server error updating settings")])
+async def set_auto_approve(body: AutoApproveBody, conn: Conn, user: User):
+    expected = "ENABLE" if body.enabled else "DISABLE"
+    if body.confirmation != expected:
+        raise HTTPException(status_code=400, detail=f"Type {expected} to confirm")
+    await conn.execute(
+        """INSERT INTO app_settings (key, value, updated_by, updated_at)
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+           ON CONFLICT (key) DO UPDATE
+           SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at""",
+        AUTO_APPROVE,
+        body.enabled,
+        user.id,
+    )
+    return {"autoApprove": body.enabled}

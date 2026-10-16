@@ -41,6 +41,15 @@ END $$;
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- 1c. Site-wide settings admins change from the app (such as auto_approve_signups).
+--     A missing row means the setting is off.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value BOOLEAN NOT NULL,
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 2. Add visit tracking columns to project_members table.
 --    Members that predate visit tracking are backfilled as visited, once, when the
 --    column is first created. Re-running this script never resets visit status.

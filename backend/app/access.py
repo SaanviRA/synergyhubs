@@ -10,6 +10,13 @@ Conn = Annotated[asyncpg.Connection, Depends(get_conn)]
 
 PENDING_APPROVAL = "Your account is waiting for approval by an administrator. Please check back later."
 
+AUTO_APPROVE = "auto_approve_signups"
+
+
+async def auto_approve_enabled(conn: asyncpg.Connection) -> bool:
+    """When an admin has turned this on, new accounts are approved as soon as they sign up."""
+    return bool(await conn.fetchval("SELECT value FROM app_settings WHERE key = $1", AUTO_APPROVE))
+
 
 async def active_user(conn: Conn, user: Annotated[CurrentUser, Depends(current_user)]) -> CurrentUser:
     """A valid token is not enough: the account must still exist and be approved."""

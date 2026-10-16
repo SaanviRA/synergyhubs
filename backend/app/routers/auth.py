@@ -7,7 +7,7 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 
-from ..access import PENDING_APPROVAL, Conn
+from ..access import PENDING_APPROVAL, Conn, auto_approve_enabled
 from ..config import get_settings
 from ..errors import SafeRoute, fails_with, logger
 from ..security import generate_token, hash_password, verify_password
@@ -80,15 +80,16 @@ async def signup(body: SignupBody, conn: Conn):
 
     password_hash = await hash_password(body.password)
     if existing is not None:
-        # Keeps the invited projects; approval is still up to an admin
+        # Keeps the invited projects; approval is up to an admin unless auto-approve is on
         user = await conn.fetchrow(
-            """UPDATE users SET name = $1, avatar = $2, password_hash = $3
+            """UPDATE users SET name = $1, avatar = $2, password_hash = $3, approved = approved OR $5
                WHERE id = $4 AND password_hash IS NULL AND google_id IS NULL
                RETURNING id, name, email, avatar, role, approved""",
             body.name.strip(),
             get_initials(body.name),
             password_hash,
             existing["id"],
+            await auto_approve_enabled(conn),
         )
         if user is None:
             raise duplicate
@@ -96,14 +97,15 @@ async def signup(body: SignupBody, conn: Conn):
 
     try:
         user = await conn.fetchrow(
-            """INSERT INTO users (name, email, avatar, password_hash, role, is_me)
-               VALUES ($1, $2, $3, $4, $5, FALSE)
+            """INSERT INTO users (name, email, avatar, password_hash, role, is_me, approved)
+               VALUES ($1, $2, $3, $4, $5, FALSE, $6)
                RETURNING id, name, email, avatar, role, approved""",
             body.name.strip(),
             email,
             get_initials(body.name),
             password_hash,
             role,
+            await auto_approve_enabled(conn),
         )
     except asyncpg.UniqueViolationError:
         raise duplicate
@@ -170,8 +172,8 @@ async def google_login(body: GoogleBody, conn: Conn):
     )
     if user is None:
         user = await conn.fetchrow(
-            """INSERT INTO users (name, email, avatar, google_id, avatar_url, role)
-               VALUES ($1, $2, $3, $4, $5, $6)
+            """INSERT INTO users (name, email, avatar, google_id, avatar_url, role, approved)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id, name, email, avatar, role, approved""",
             name,
             email,
@@ -179,14 +181,20 @@ async def google_login(body: GoogleBody, conn: Conn):
             google_id,
             picture,
             role,
+            await auto_approve_enabled(conn),
         )
     elif not user["google_id"]:
+        # An invite placeholder signing up for the first time counts as a new account for
+        # auto-approve; an existing password account keeps its approval state.
         user = await conn.fetchrow(
-            """UPDATE users SET google_id = $1, avatar_url = $2 WHERE id = $3
+            """UPDATE users SET google_id = $1, avatar_url = $2,
+                      approved = approved OR ($4 AND password_hash IS NULL)
+               WHERE id = $3
                RETURNING id, name, email, avatar, role, approved""",
             google_id,
             picture,
             user["id"],
+            await auto_approve_enabled(conn),
         )
 
     return _session(user)
