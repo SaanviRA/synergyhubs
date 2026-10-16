@@ -15,6 +15,7 @@ export default function RoleSelection({ onSelectRole }) {
         
         {/* Branding header */}
         <div className="space-y-3">
+          <img src="/favicon.svg" alt="" className="h-16 w-16 mx-auto rounded-2xl shadow-lg shadow-brand-500/20" />
           <h1 className="text-4xl font-heading font-black tracking-tight bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 bg-clip-text text-transparent">
             Welcome to SynergyHubs
           </h1>
