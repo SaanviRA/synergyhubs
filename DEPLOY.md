@@ -52,7 +52,9 @@ VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh
 This writes `build/group_app-<version>.tar.gz` (about 13 MB).
 
 - `VITE_API_URL` is the public address of the site. It is compiled into the frontend, so a bundle is
-  tied to one domain. You can also set it in `.env` instead of on the command line.
+  tied to one domain. It defaults to `https://synergyhubs.org`, so plain `scripts/build_bundle.sh` builds
+  for the live site; pass it on the command line for any other domain. The `VITE_API_URL` in `.env` is
+  ignored here, because that one is for local development.
 - The Google values (`VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_APP_ID`, `VITE_GOOGLE_API_KEY`) are read from
   `.env` and compiled in the same way.
 - The Python packages inside the bundle are built for **Python 3.12 on x86_64** (Ubuntu 24.04). For a

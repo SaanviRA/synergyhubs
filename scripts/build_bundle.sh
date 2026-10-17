@@ -3,7 +3,7 @@
 # The server needs no npm, uv, or internet access to run it - just python3 and the bundle.
 #
 #   scripts/build_bundle.sh
-#   VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh
+#   VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh   (default: https://synergyhubs.org)
 #
 # BUNDLE_PYTHON / BUNDLE_PLATFORM must match the server's python3 and CPU (defaults: Ubuntu 24.04, x86_64).
 set -euo pipefail
@@ -23,12 +23,11 @@ env_value() { # from the environment, else from .env
   [ -n "$value" ] || value="$(grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true)"
   printf '%s' "$value"
 }
-api_url="$(env_value VITE_API_URL)"
-if [ -z "$api_url" ]; then
-  echo "VITE_API_URL is not set. Put the public URL of the site in .env or run:" >&2
-  echo "  VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh" >&2
-  exit 1
-fi
+# The public site unless VITE_API_URL is given on the command line. .env is not consulted: its value
+# is for local development (localhost). Exported so `vite build` uses it instead of reading .env itself.
+DEFAULT_API_URL="https://synergyhubs.org"
+api_url="${VITE_API_URL:-$DEFAULT_API_URL}"
+export VITE_API_URL="$api_url"
 echo "==> Frontend will call the API at: $api_url"
 case "$api_url" in
   *localhost*|*127.0.0.1*) echo "    WARNING: that is a local address - browsers on other machines will not reach the API." >&2 ;;
