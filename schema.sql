@@ -108,6 +108,8 @@ CREATE TABLE milestones (
     title VARCHAR(255) NOT NULL,
     details TEXT,
     due_date VARCHAR(50) NOT NULL,
+    -- The real due date the timeline is sorted by; due_date is its display label. NULL means TBD.
+    due_on DATE,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in-progress', 'completed', 'delayed')),
     assigned_to VARCHAR(100) DEFAULT 'Everyone',
     assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

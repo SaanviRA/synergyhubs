@@ -1,9 +1,11 @@
+from datetime import date as Date
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..access import Conn, User
 from ..errors import SafeRoute, fails_with
-from ..utils import generate_join_code, random_class_color
+from ..utils import due_label, generate_join_code, random_class_color
 
 router = APIRouter(prefix="/api/classes", route_class=SafeRoute)
 
@@ -34,7 +36,7 @@ class ClassBody(BaseModel):
 class TimelineItem(BaseModel):
     title: str | None = None
     details: str | None = None
-    date: str | None = None
+    dueOn: Date | None = None
 
 
 class ProjectBody(BaseModel):
@@ -213,12 +215,13 @@ async def create_project(classId: int, body: ProjectBody, conn: Conn, user: User
         for milestone in body.timeline or []:
             if milestone.title and milestone.title.strip():
                 await conn.execute(
-                    """INSERT INTO milestones (project_id, title, details, due_date, status, assigned_to)
-                       VALUES ($1, $2, $3, $4, 'pending', 'Everyone')""",
+                    """INSERT INTO milestones (project_id, title, details, due_date, due_on, status, assigned_to)
+                       VALUES ($1, $2, $3, $4, $5, 'pending', 'Everyone')""",
                     project["id"],
                     milestone.title.strip(),
                     milestone.details.strip() if milestone.details else None,
-                    milestone.date or "TBD",
+                    due_label(milestone.dueOn),
+                    milestone.dueOn,
                 )
 
         # Automatically assign all students of this class to this new project,

@@ -119,6 +119,35 @@ CREATE TABLE IF NOT EXISTS project_removals (
     PRIMARY KEY (project_id, user_id)
 );
 
+-- 2d. Give milestones a real due date so the timeline can be sorted. Older milestones only have a
+--     label like 'Mar 11' or 'Mar 18 (Today)', so their date is read from it: in the year the project
+--     was created, or the next year when that would land more than a month before the project
+--     existed. Labels that can't be read (such as 'TBD') stay undated and sort last.
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS due_on DATE;
+
+DO $$
+DECLARE
+    m RECORD;
+    guess DATE;
+BEGIN
+    FOR m IN
+        SELECT ms.id, substring(ms.due_date FROM '^([A-Z][a-z]{2} [0-9]{1,2})') AS label, p.created_at
+        FROM milestones ms JOIN projects p ON p.id = ms.project_id
+        WHERE ms.due_on IS NULL AND ms.due_date ~ '^[A-Z][a-z]{2} [0-9]{1,2}'
+    LOOP
+        BEGIN
+            guess := to_date(m.label || ' ' || EXTRACT(YEAR FROM m.created_at), 'Mon DD YYYY');
+            IF guess < m.created_at::date - 30 THEN
+                guess := guess + INTERVAL '1 year';
+            END IF;
+            UPDATE milestones SET due_on = guess WHERE id = m.id;
+        EXCEPTION WHEN OTHERS THEN
+            -- Not a real date (such as 'Feb 30'): leave it undated
+            NULL;
+        END;
+    END LOOP;
+END $$;
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

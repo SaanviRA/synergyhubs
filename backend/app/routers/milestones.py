@@ -1,10 +1,12 @@
+from datetime import date as Date
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..access import Conn, ProjectAccess, User
 from ..errors import SafeRoute, fails_with
 from ..progress import recalculate_project_progress
-from ..utils import short_date, submitted_at_label
+from ..utils import due_label, short_date, submitted_at_label
 
 router = APIRouter(prefix="/api/projects/{projectId}/milestones", route_class=SafeRoute)
 
@@ -19,6 +21,17 @@ class MilestoneUpdateBody(BaseModel):
     title: str | None = None
     details: str | None = None
     date: str | None = None
+    # Changes the real due date (null: TBD) and with it the date label
+    dueOn: Date | None = None
+
+
+class MilestoneCreateBody(BaseModel):
+    title: str | None = None
+    details: str | None = None
+    dueOn: Date | None = None
+
+
+MAX_TITLE_LENGTH = 200
 
 
 class SubmissionBody(BaseModel):
@@ -35,35 +48,65 @@ async def _milestone_title(conn, project_id: int, milestone_id: int) -> str:
     return title
 
 
-# Fetch milestones for a project
+MILESTONE_COLUMNS = """id, title, details, due_date, due_on, status, assigned_to,
+                       submission_file_name, submission_submitted_at, submission_file_url"""
+
+
+def _milestone(row) -> dict:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "details": row["details"],
+        "date": row["due_date"],
+        "dueOn": row["due_on"].isoformat() if row["due_on"] else None,
+        "status": row["status"],
+        "assignee": row["assigned_to"],
+        "submission": {
+            "fileName": row["submission_file_name"],
+            "submittedAt": row["submission_submitted_at"],
+            "fileUrl": row["submission_file_url"],
+        }
+        if row["submission_file_name"]
+        else None,
+    }
+
+
+# Fetch a project's milestones in date order; undated (TBD) ones come last, oldest first
 @router.get("", dependencies=[fails_with("Server error fetching milestones"), ProjectAccess])
 async def get_milestones(projectId: int, conn: Conn):
     rows = await conn.fetch(
-        """SELECT id, title, details, due_date, status, assigned_to,
-                  submission_file_name, submission_submitted_at, submission_file_url
+        f"""SELECT {MILESTONE_COLUMNS}
            FROM milestones
            WHERE project_id = $1
-           ORDER BY id ASC""",
+           ORDER BY due_on ASC NULLS LAST, id ASC""",
         projectId,
     )
-    return [
-        {
-            "id": row["id"],
-            "title": row["title"],
-            "details": row["details"],
-            "date": row["due_date"],
-            "status": row["status"],
-            "assignee": row["assigned_to"],
-            "submission": {
-                "fileName": row["submission_file_name"],
-                "submittedAt": row["submission_submitted_at"],
-                "fileUrl": row["submission_file_url"],
-            }
-            if row["submission_file_name"]
-            else None,
-        }
-        for row in rows
-    ]
+    return [_milestone(row) for row in rows]
+
+
+# Add an event to the timeline after the project was created. Any project member may do this.
+@router.post("", status_code=201, dependencies=[fails_with("Server error adding milestone"), ProjectAccess])
+async def create_milestone(projectId: int, body: MilestoneCreateBody, conn: Conn):
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Milestone title is required")
+    if len(title) > MAX_TITLE_LENGTH:
+        raise HTTPException(
+            status_code=400, detail=f"Milestone titles can be at most {MAX_TITLE_LENGTH} characters"
+        )
+
+    row = await conn.fetchrow(
+        f"""INSERT INTO milestones (project_id, title, details, due_date, due_on, status, assigned_to)
+            VALUES ($1, $2, $3, $4, $5, 'pending', 'Everyone')
+            RETURNING {MILESTONE_COLUMNS}""",
+        projectId,
+        title,
+        (body.details or "").strip() or None,
+        due_label(body.dueOn),
+        body.dueOn,
+    )
+    progress = await recalculate_project_progress(conn, projectId)
+    return {"milestone": _milestone(row), "progress": progress}
 
 
 # Update a milestone (status, title, details, date) and recalculate project progress
@@ -81,14 +124,19 @@ async def update_milestone(
     title = await _milestone_title(conn, projectId, milestoneId)
 
     # Only the fields present in the request are updated
-    fields = [field for field in UPDATABLE_COLUMNS if field in body.model_fields_set]
-    if fields:
-        set_clause = ", ".join(
-            f"{UPDATABLE_COLUMNS[field]} = ${i}" for i, field in enumerate(fields, start=1)
-        )
+    updates = {
+        UPDATABLE_COLUMNS[field]: getattr(body, field)
+        for field in UPDATABLE_COLUMNS
+        if field in body.model_fields_set
+    }
+    if "dueOn" in body.model_fields_set:
+        updates["due_on"] = body.dueOn
+        updates["due_date"] = due_label(body.dueOn)
+    if updates:
+        set_clause = ", ".join(f"{column} = ${i}" for i, column in enumerate(updates, start=1))
         await conn.execute(
-            f"UPDATE milestones SET {set_clause} WHERE id = ${len(fields) + 1} AND project_id = ${len(fields) + 2}",
-            *(getattr(body, field) for field in fields),
+            f"UPDATE milestones SET {set_clause} WHERE id = ${len(updates) + 1} AND project_id = ${len(updates) + 2}",
+            *updates.values(),
             milestoneId,
             projectId,
         )

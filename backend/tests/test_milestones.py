@@ -1,6 +1,8 @@
+import pytest
+
 from app.utils import short_date
 
-from .conftest import ALEX, PROJECT, auth
+from .conftest import ALEX, MR_DAVIS, PROJECT, auth
 
 BASE = f"/api/projects/{PROJECT}/milestones"
 
@@ -15,6 +17,8 @@ async def _last_log(conn):
 async def test_list_milestones(client):
     milestones = (await client.get(BASE, headers=auth(ALEX))).json()
     assert [m["id"] for m in milestones] == [1, 2, 3, 4]
+    # Seeded milestones only have labels; migration.sql reads their dates from them
+    assert [m.pop("dueOn")[5:] for m in milestones] == ["03-11", "03-18", "03-21", "03-25"]
     assert milestones[0] == {
         "id": 1,
         "title": "Topic Selection & Approval",
@@ -112,3 +116,61 @@ async def test_submit_without_a_file_uses_defaults(client, conn):
         milestone["submission"]["fileName"] == "Submission.pdf" and milestone["submission"]["fileUrl"] is None
     )
     assert (await _last_log(conn))[1] == 'Submitted work for "Create Presentation Slides": Document'
+
+
+async def test_members_add_events_after_the_project_is_created(client):
+    year = (await client.get(BASE, headers=auth(ALEX))).json()[0]["dueOn"][:4]
+    res = await client.post(
+        BASE,
+        json={"title": "  Peer review  ", "details": " Swap drafts ", "dueOn": f"{year}-03-14"},
+        headers=auth(ALEX),
+    )
+    assert res.status_code == 201
+    created = res.json()
+    assert created["milestone"] == {
+        "id": created["milestone"]["id"],
+        "title": "Peer review",
+        "details": "Swap drafts",
+        "date": "Mar 14",
+        "dueOn": f"{year}-03-14",
+        "status": "pending",
+        "assignee": "Everyone",
+        "submission": None,
+    }
+    # 1 of 5 milestones is now completed
+    assert created["progress"] == 20
+    # It takes its place by date (between Mar 11 and Mar 18), not at the end
+    milestones = (await client.get(BASE, headers=auth(ALEX))).json()
+    assert [m["id"] for m in milestones] == [1, created["milestone"]["id"], 2, 3, 4]
+
+
+async def test_changing_a_due_date_moves_the_milestone(client):
+    year = (await client.get(BASE, headers=auth(ALEX))).json()[0]["dueOn"][:4]
+    await client.patch(f"{BASE}/1", json={"dueOn": f"{year}-03-30"}, headers=auth(ALEX))
+    milestones = (await client.get(BASE, headers=auth(ALEX))).json()
+    assert [(m["id"], m["date"]) for m in milestones][-1] == (1, "Mar 30")
+
+    await client.patch(f"{BASE}/4", json={"dueOn": None}, headers=auth(ALEX))
+    milestones = (await client.get(BASE, headers=auth(ALEX))).json()
+    assert [(m["id"], m["date"], m["dueOn"]) for m in milestones][-1] == (4, "TBD", None)
+
+
+async def test_teachers_add_events_and_dates_are_optional(client):
+    res = await client.post(BASE, json={"title": "Final check-in"}, headers=auth(MR_DAVIS))
+    assert res.status_code == 201
+    milestone = res.json()["milestone"]
+    assert (milestone["date"], milestone["dueOn"], milestone["details"]) == ("TBD", None, None)
+    # Undated events sort after dated ones
+    assert (await client.get(BASE, headers=auth(ALEX))).json()[-1]["id"] == milestone["id"]
+
+
+@pytest.mark.parametrize(
+    "body", [{}, {"title": "   "}, {"title": "x" * 201}, {"title": "Ok", "dueOn": "Apr 2"}]
+)
+async def test_invalid_events_are_refused(client, conn, body):
+    assert (await client.post(BASE, json=body, headers=auth(ALEX))).status_code == 400
+    assert await conn.fetchval("SELECT COUNT(*) FROM milestones WHERE project_id = $1", PROJECT) == 4
+
+
+async def test_outsiders_cannot_add_events(client, outsider):
+    assert (await client.post(BASE, json={"title": "Sneaky"}, headers=outsider)).status_code == 403

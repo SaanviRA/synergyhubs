@@ -1,7 +1,7 @@
 import math
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -26,6 +26,11 @@ def short_date(now: datetime | None = None) -> str:
     """'Oct 5' - the display date stored alongside logs."""
     now = now or datetime.now()
     return f"{MONTHS[now.month - 1]} {now.day}"
+
+
+def due_label(due_on: date | None) -> str:
+    """'Oct 5' for a milestone's due date, 'TBD' when it has none."""
+    return short_date(datetime(due_on.year, due_on.month, due_on.day)) if due_on else "TBD"
 
 
 def today_label(now: datetime | None = None) -> str:

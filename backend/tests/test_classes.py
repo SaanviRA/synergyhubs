@@ -143,9 +143,10 @@ PROJECT_BODY = {
     "color": "from-rose-500 to-pink-600",
     "hue": "rose",
     "timeline": [
-        {"title": " Kickoff ", "details": " Pick teams ", "date": "Apr 2"},
         {"title": "Final report"},
-        {"title": "   ", "date": "ignored"},
+        {"title": "Present", "dueOn": "2027-05-10"},
+        {"title": " Kickoff ", "details": " Pick teams ", "dueOn": "2027-04-02"},
+        {"title": "   ", "dueOn": "2027-01-01"},
     ],
 }
 
@@ -166,10 +167,13 @@ async def test_teacher_creates_project_with_timeline(client, conn):
     milestones = (
         await client.get(f"/api/projects/{project['id']}/milestones", headers=auth(MR_DAVIS))
     ).json()
-    assert [(m["title"], m["details"], m["date"], m["status"], m["assignee"]) for m in milestones] == [
-        ("Kickoff", "Pick teams", "Apr 2", "pending", "Everyone"),
-        ("Final report", None, "TBD", "pending", "Everyone"),
+    # In date order whatever order they were added in, undated ones last
+    assert [(m["title"], m["details"], m["date"], m["dueOn"], m["status"]) for m in milestones] == [
+        ("Kickoff", "Pick teams", "Apr 2", "2027-04-02", "pending"),
+        ("Present", None, "May 10", "2027-05-10", "pending"),
+        ("Final report", None, "TBD", None, "pending"),
     ]
+    assert {m["assignee"] for m in milestones} == {"Everyone"}
 
     # Every student in the class is added to the project; the teacher is not
     members = await conn.fetch(

@@ -45,6 +45,8 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
       setTimeline([...timeline, {
         title: newMilestoneTitle.trim(),
         details: newMilestoneDetails.trim(),
+        // Sent to the server, which sorts the timeline by it; `date` is only shown in this form
+        dueOn: newMilestoneDate || null,
         date: formattedDate
       }]);
 

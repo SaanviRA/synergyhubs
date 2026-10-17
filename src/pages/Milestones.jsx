@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, CheckCircle2, Clock, AlertCircle, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2 } from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, AlertCircle, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2, Plus } from 'lucide-react';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
+import AddEventModal from '../components/AddEventModal';
 
 export default function Milestones({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [expandedId, setExpandedId] = useState(null);
+  const [showAddEvent, setShowAddEvent] = useState(false);
   const [showManualSubmitModal, setShowManualSubmitModal] = useState(false);
   const [manualFileName, setManualFileName] = useState('');
   const [manualFileUrl, setManualFileUrl] = useState('');
@@ -162,6 +164,12 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
     }
   };
 
+  // Reload rather than append: the new event belongs wherever its date puts it
+  const handleEventCreated = async () => {
+    setShowAddEvent(false);
+    await fetchMilestones();
+  };
+
   const toggleExpand = (id) => {
     setExpandedId(prev => (prev === id ? null : id));
   };
@@ -183,7 +191,20 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
           <h1 className="text-3xl font-heading font-bold text-surface-900 tracking-tight">Timeline</h1>
           <p className="text-surface-600 mt-1">{projectData ? projectData.name : 'Manage project micro-milestones'}</p>
         </div>
+        <button
+          onClick={() => setShowAddEvent(true)}
+          className="bg-brand-600 text-white px-4 py-2 flex items-center justify-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-[0.98] cursor-pointer shrink-0"
+        >
+          <Plus size={18} className="text-brand-100" />
+          <span>Add Event</span>
+        </button>
       </div>
+
+      {!isLoading && milestones.length === 0 && (
+        <div className="glass rounded-2xl p-8 text-center text-surface-500">
+          No events on this timeline yet. Use Add Event to plan the first one.
+        </div>
+      )}
 
       <div className="relative mt-8 ml-3 sm:ml-0">
         {/* Vertical Line */}
@@ -437,6 +458,15 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
             </div>
           </div>
         </div>
+      )}
+
+      {showAddEvent && (
+        <AddEventModal
+          projectId={projectData.id}
+          accent="brand"
+          onClose={() => setShowAddEvent(false)}
+          onCreated={handleEventCreated}
+        />
       )}
 
       {/* Google Drive Integration Elements */}
