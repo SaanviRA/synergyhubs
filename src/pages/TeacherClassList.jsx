@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Book, Users, ArrowRight } from 'lucide-react';
+import { classProgress } from '../utils/classProgress';
 
 export default function TeacherClassList({ onSelectClass }) {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -116,15 +117,18 @@ export default function TeacherClassList({ onSelectClass }) {
               
               <div className="space-y-1.5">
                 <div className="flex justify-between text-sm font-medium pb-1">
-                  <span className="text-surface-600">Active Project Progress</span>
-                  <span className="text-brand-600">
-                    {cls.projects.find(p => p.status === 'present')?.progress || 0}%
+                  <span className="text-surface-600">
+                    Overall Progress
+                    <span className="text-surface-400 font-normal">
+                      {' '}· {cls.projects.length} {cls.projects.length === 1 ? 'project' : 'projects'}
+                    </span>
                   </span>
+                  <span className="text-brand-600">{classProgress(cls.projects)}%</span>
                 </div>
                 <div className="w-full h-2 bg-surface-100 rounded-full overflow-hidden">
                   <div 
                     className={`h-full bg-gradient-to-r ${cls.color} rounded-full transition-all duration-1000 ease-out`}
-                    style={{ width: `${cls.projects.find(p => p.status === 'present')?.progress || 0}%` }}
+                    style={{ width: `${classProgress(cls.projects)}%` }}
                   />
                 </div>
               </div>
