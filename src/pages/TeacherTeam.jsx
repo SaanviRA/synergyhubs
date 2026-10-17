@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, ShieldCheck, PenTool, MessageSquare, Plus, Activity, ArrowLeft, MailPlus, X, Trash2 } from 'lucide-react';
+import { User, ShieldCheck, PenTool, MessageSquare, Plus, Activity, ArrowLeft, MailPlus, X, Trash2, UserMinus } from 'lucide-react';
 
 export default function TeacherTeam({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [showLogModal, setShowLogModal] = useState(false);
@@ -147,6 +147,20 @@ export default function TeacherTeam({ classData, projectData, onBack, onNavigate
     }
   };
 
+  const handleRemoveMember = async (member) => {
+    if (!window.confirm(`Remove ${member.name} from this project's team?`)) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/team/${member.id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        await fetchTeamAndLogs();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="pt-6 sm:pt-24 pb-32 px-4 max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
@@ -193,6 +207,22 @@ export default function TeacherTeam({ classData, projectData, onBack, onNavigate
             <div className="flex items-start justify-between mb-4">
               <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 font-semibold border-2 border-white shadow-sm flex items-center justify-center shrink-0">
                 {member.avatar}
+              </div>
+              <div className="flex items-center gap-1">
+                {member.isOwner && (
+                  <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full uppercase tracking-wider">
+                    Owner
+                  </span>
+                )}
+                {!member.isOwner && !member.isMe && (
+                  <button
+                    onClick={() => handleRemoveMember(member)}
+                    className="p-1.5 text-surface-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                    title="Remove from team"
+                  >
+                    <UserMinus size={16} />
+                  </button>
+                )}
               </div>
             </div>
             

@@ -27,14 +27,22 @@ def _require_text(body: TextBody) -> str:
     return body.text
 
 
+# A project is owned by whoever owns its class (holds the class's 'teacher' role). Expects the
+# project as $1 and the member as pm.user_id.
+IS_OWNER = """EXISTS (SELECT 1 FROM projects p
+                      JOIN class_members cm ON cm.class_id = p.class_id
+                      WHERE p.id = $1 AND cm.user_id = pm.user_id AND cm.role = 'teacher')"""
+
+
 # Fetch project team members
 @router.get("/team", dependencies=[fails_with("Server error fetching team members"), ProjectAccess])
 async def get_team(projectId: int, conn: Conn, user: User):
     rows = await conn.fetch(
-        """SELECT u.id, u.name, u.email, u.avatar, (u.id = $2) AS is_me, pm.roles, pm.active_log,
+        f"""SELECT u.id, u.name, u.email, u.avatar, (u.id = $2) AS is_me, pm.roles, pm.active_log,
                   COALESCE(pm.has_visited, FALSE) AS has_visited,
                   pm.last_visited_at,
-                  COALESCE(pm.visit_count, 0) AS visit_count
+                  COALESCE(pm.visit_count, 0) AS visit_count,
+                  {IS_OWNER} AS is_owner
            FROM project_members pm
            JOIN users u ON pm.user_id = u.id
            WHERE pm.project_id = $1
@@ -55,6 +63,7 @@ async def get_team(projectId: int, conn: Conn, user: User):
             "hasVisited": row["has_visited"],
             "lastVisitedAt": iso_z(row["last_visited_at"]),
             "visitCount": row["visit_count"],
+            "isOwner": row["is_owner"],
         }
         for row in rows
     ]
@@ -87,6 +96,9 @@ async def invite_teammate(projectId: int, body: InviteBody, conn: Conn):
             [],
             "Just joined the project!",
         )
+        await conn.execute(
+            "DELETE FROM project_removals WHERE project_id = $1 AND user_id = $2", projectId, invited["id"]
+        )
 
     return {
         "success": True,
@@ -98,6 +110,31 @@ async def invite_teammate(projectId: int, body: InviteBody, conn: Conn):
             "activeLog": "Just joined the project!",
         },
     }
+
+
+# Remove a member from the team. Anyone on the project may do this, except to the owner.
+@router.delete("/team/{userId:int}", dependencies=[fails_with("Server error removing teammate"), ProjectAccess])
+async def remove_teammate(projectId: int, userId: int, conn: Conn):
+    member = await conn.fetchrow(
+        f"SELECT {IS_OWNER} AS is_owner FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = $2",
+        projectId,
+        userId,
+    )
+    if member is None:
+        raise HTTPException(status_code=404, detail="That person is not on this team")
+    if member["is_owner"]:
+        raise HTTPException(status_code=403, detail="The project owner cannot be removed")
+
+    async with conn.transaction():
+        await conn.execute(
+            "DELETE FROM project_members WHERE project_id = $1 AND user_id = $2", projectId, userId
+        )
+        await conn.execute(
+            "INSERT INTO project_removals (project_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            projectId,
+            userId,
+        )
+    return {"success": True}
 
 
 def _require_role(body: RoleBody) -> tuple[int, str]:

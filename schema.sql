@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS workspace_messages CASCADE;
 DROP TABLE IF EXISTS workspaces CASCADE;
 DROP TABLE IF EXISTS resources CASCADE;
 DROP TABLE IF EXISTS milestones CASCADE;
+DROP TABLE IF EXISTS project_removals CASCADE;
 DROP TABLE IF EXISTS project_members CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
 DROP TABLE IF EXISTS class_members CASCADE;
@@ -88,6 +89,14 @@ CREATE TABLE project_members (
     visit_count INTEGER DEFAULT 0,
     -- Where a member who is not in the project's class files it ("Shared" when NULL)
     placed_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
+    PRIMARY KEY (project_id, user_id)
+);
+
+-- 5b. Members removed from a project's team. Visiting the project does not put them back;
+--     inviting them again does.
+CREATE TABLE project_removals (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     PRIMARY KEY (project_id, user_id)
 );
 

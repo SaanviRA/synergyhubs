@@ -103,6 +103,14 @@ ALTER TABLE project_members
 ALTER TABLE project_members
     ADD COLUMN IF NOT EXISTS placed_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;
 
+-- 2c. Members removed from a project's team. Visiting the project does not put them back;
+--     inviting them again does.
+CREATE TABLE IF NOT EXISTS project_removals (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (project_id, user_id)
+);
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

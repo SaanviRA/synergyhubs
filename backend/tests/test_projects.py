@@ -64,6 +64,7 @@ async def test_team_marks_the_caller_as_me(client):
         "activeLog": "Found 3 primary sources on JFK.",
         "hasVisited": True,
         "visitCount": 5,
+        "isOwner": False,
     }
 
 

@@ -181,3 +181,40 @@ async def test_move_shared_project_rules(client, outsider):
     res = await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(ALEX))
     assert (res.status_code, res.json()) == (400, {"error": "Only projects shared with you can be moved"})
     assert (await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(MRS_SMITH))).status_code == 403
+
+
+async def test_members_can_remove_teammates_but_not_the_owner(client, conn):
+    # A class owner can be on the team too (a student who created the class is added automatically)
+    await conn.execute("INSERT INTO project_members (project_id, user_id) VALUES (101, $1)", MR_DAVIS["id"])
+    team = (await client.get(f"{BASE}/team", headers=auth(ALEX))).json()
+    assert [(m["id"], m["isOwner"]) for m in team] == [(1, False), (2, False), (3, False), (4, True)]
+
+    res = await client.delete(f"{BASE}/team/{MR_DAVIS['id']}", headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (403, {"error": "The project owner cannot be removed"})
+
+    res = await client.delete(f"{BASE}/team/{SARAH['id']}", headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (200, {"success": True})
+    assert [m["id"] for m in (await client.get(f"{BASE}/team", headers=auth(ALEX))).json()] == [1, 3, 4]
+    res = await client.delete(f"{BASE}/team/{SARAH['id']}", headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (404, {"error": "That person is not on this team"})
+
+
+async def test_removed_classmates_stay_off_the_team_until_invited_again(client, conn):
+    await client.delete(f"{BASE}/team/{SARAH['id']}", headers=auth(ALEX))
+    # Sarah is still in the class, so she can open the project, but that does not rejoin her
+    assert (await client.post(f"{BASE}/visit", headers=auth(SARAH))).status_code == 200
+    assert await _roles(conn, SARAH["id"]) is None
+
+    await client.post(f"{BASE}/team/invite", json={"email": SARAH["email"]}, headers=auth(ALEX))
+    await client.post(f"{BASE}/visit", headers=auth(SARAH))
+    assert await conn.fetchval(
+        "SELECT visit_count FROM project_members WHERE project_id = 101 AND user_id = $1", SARAH["id"]
+    ) == 1
+
+
+async def test_removed_invitees_lose_access(client, outsider):
+    await client.post(f"{BASE}/team/invite", json={"email": "olive@example.com"}, headers=auth(ALEX))
+    olive = (await client.get(f"{BASE}/team", headers=auth(ALEX))).json()[-1]["id"]
+    await client.delete(f"{BASE}/team/{olive}", headers=auth(SARAH))
+    assert (await client.get(f"{BASE}/team", headers=outsider)).status_code == 403
+    assert (await client.delete(f"{BASE}/team/{ALEX['id']}", headers=outsider)).status_code == 403

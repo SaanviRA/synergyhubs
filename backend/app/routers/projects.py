@@ -30,12 +30,14 @@ async def get_project(projectId: int, conn: Conn):
     }
 
 
-# Record student project visit / click
+# Record student project visit / click. A visit adds a class member to the team, unless they
+# were removed from it.
 @router.post("/visit", dependencies=[fails_with("Server error recording project visit"), ProjectAccess])
 async def record_visit(projectId: int, conn: Conn, user: User):
     await conn.execute(
         """INSERT INTO project_members (project_id, user_id, roles, active_log, has_visited, last_visited_at, visit_count)
-           VALUES ($1, $2, ARRAY['Member'], 'Joined project workspace', TRUE, CURRENT_TIMESTAMP, 1)
+           SELECT $1, $2, ARRAY['Member'], 'Joined project workspace', TRUE, CURRENT_TIMESTAMP, 1
+           WHERE NOT EXISTS (SELECT 1 FROM project_removals WHERE project_id = $1 AND user_id = $2)
            ON CONFLICT (project_id, user_id)
            DO UPDATE SET has_visited = TRUE, last_visited_at = CURRENT_TIMESTAMP,
                          visit_count = COALESCE(project_members.visit_count, 0) + 1""",
