@@ -37,6 +37,32 @@ function App() {
 
   const isTeacher = user?.role === 'teacher';
 
+  // The project cards show the class as it was when it was opened, so reload it each time the
+  // project list comes back into view: progress may have changed (here or by a teammate) since.
+  const classId = selectedClass?.id;
+  const showingProjectList = Boolean(classId) && !selectedProject;
+  useEffect(() => {
+    if (!showingProjectList) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+        const res = await fetch(`${apiUrl}/api/classes`);
+        if (!res.ok) return;
+        const fresh = (await res.json()).find((cls) => cls.id === classId);
+        if (fresh && active) {
+          setSelectedClass((prev) => (prev?.id === fresh.id ? { ...prev, ...fresh } : prev));
+        }
+      } catch (err) {
+        console.error('Error refreshing class:', err);
+      }
+    };
+    refresh();
+    return () => {
+      active = false;
+    };
+  }, [showingProjectList, classId]);
+
   // Unread workspace chat messages in the open project, shown on the Workspaces tab
   const [workspaceUnread, setWorkspaceUnread] = useState(0);
   const projectId = selectedProject?.id;
@@ -170,8 +196,17 @@ function App() {
       );
     }
 
+    // Keep the project's card in the class in step too, so it is current when going back
     const handleUpdateProject = (updatedFields) => {
       setSelectedProject((prev) => (prev ? { ...prev, ...updatedFields } : prev));
+      setSelectedClass((prev) =>
+        prev?.projects
+          ? {
+              ...prev,
+              projects: prev.projects.map((p) => (p.id === selectedProject.id ? { ...p, ...updatedFields } : p)),
+            }
+          : prev
+      );
     };
 
     if (isTeacher) {
