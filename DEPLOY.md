@@ -189,7 +189,18 @@ HTTPS is required for Google sign-in (see below).
 
 ## Updating the app
 
-On your development machine:
+One command builds, uploads and deploys:
+
+```bash
+scripts/build_and_deploy.sh               # to the "deploy_server" host in ~/.ssh/config
+scripts/build_and_deploy.sh other_host    # or any host ssh can reach
+```
+
+It takes the user, hostname and key from your SSH configuration, builds the bundle for the server's own
+Python version and CPU, and runs `group-app-deploy` there (with `sudo` unless you log in as root).
+`VITE_API_URL` works as for `build_bundle.sh`. The server needs its first deployment done by hand first.
+
+To do the same steps by hand, on your development machine:
 
 ```bash
 VITE_API_URL=https://yourdomain.com scripts/build_bundle.sh
