@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, User, Mail, School, Check, Book, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 
 export default function Account({ onBack, onLogout, onOpenAdmin }) {
-  const [profile, setProfile] = useState({ name: '', email: '', avatar: '' });
+  const [profile, setProfile] = useState({ name: '', email: '', avatar: '', school: '', academic_year: '' });
   const [classes, setClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +46,9 @@ export default function Account({ onBack, onLogout, onOpenAdmin }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: profile.name,
-          email: profile.email
+          email: profile.email,
+          school: profile.school || '',
+          academic_year: profile.academic_year || ''
         })
       });
       if (res.ok) {
@@ -169,11 +171,15 @@ export default function Account({ onBack, onLogout, onOpenAdmin }) {
             <div className="space-y-4 pt-2">
               <div className="flex items-center gap-3 text-surface-600">
                 <School size={18} className="text-surface-400" />
-                <span className="text-sm font-medium">Greenwood High School</span>
+                {profile.school
+                  ? <span className="text-sm font-medium">{profile.school}</span>
+                  : <span className="text-sm text-surface-400">No school set</span>}
               </div>
               <div className="flex items-center gap-3 text-surface-600">
                 <Book size={18} className="text-surface-400" />
-                <span className="text-sm font-medium">Academic Year 2026</span>
+                {profile.academic_year
+                  ? <span className="text-sm font-medium">Academic Year {profile.academic_year}</span>
+                  : <span className="text-sm text-surface-400">No academic year set</span>}
               </div>
             </div>
           </div>
@@ -217,6 +223,36 @@ export default function Account({ onBack, onLogout, onOpenAdmin }) {
                     required
                     value={profile.email}
                     onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                    className="w-full bg-surface-50 border border-surface-200 rounded-xl py-3 pl-11 pr-4 text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all font-medium text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-surface-700">School</label>
+                <div className="relative">
+                  <School size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400" />
+                  <input
+                    type="text"
+                    maxLength={150}
+                    placeholder="e.g. Greenwood High School"
+                    value={profile.school || ''}
+                    onChange={(e) => setProfile({ ...profile, school: e.target.value })}
+                    className="w-full bg-surface-50 border border-surface-200 rounded-xl py-3 pl-11 pr-4 text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all font-medium text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-surface-700">Academic Year</label>
+                <div className="relative">
+                  <Book size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400" />
+                  <input
+                    type="text"
+                    maxLength={20}
+                    placeholder="e.g. 2026-27"
+                    value={profile.academic_year || ''}
+                    onChange={(e) => setProfile({ ...profile, academic_year: e.target.value })}
                     className="w-full bg-surface-50 border border-surface-200 rounded-xl py-3 pl-11 pr-4 text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all font-medium text-sm"
                   />
                 </div>

@@ -28,6 +28,9 @@ CREATE TABLE users (
     -- New accounts cannot sign in until an admin approves them
     approved BOOLEAN NOT NULL DEFAULT FALSE,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Shown on the account page; each user fills these in themselves
+    school VARCHAR(150),
+    academic_year VARCHAR(20),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -43,7 +43,7 @@ async def test_signup_waits_for_approval_then_login(client, conn):
 
     me = await client.get("/api/users/me", headers={"Authorization": f"Bearer {res.json()['token']}"})
     assert me.status_code == 200
-    assert me.json() == {**user, "is_me": False, "is_admin": False}
+    assert me.json() == {**user, "is_me": False, "is_admin": False, "school": None, "academic_year": None}
 
 
 async def test_tokens_stop_working_once_an_account_is_unapproved_or_deleted(client, conn):

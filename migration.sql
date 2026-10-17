@@ -153,6 +153,10 @@ END $$;
 ALTER TABLE milestones ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE milestones ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
 
+-- 2f. Let each user set their own school and academic year on the account page
+ALTER TABLE users ADD COLUMN IF NOT EXISTS school VARCHAR(150);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS academic_year VARCHAR(20);
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

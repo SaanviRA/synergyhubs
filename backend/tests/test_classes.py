@@ -13,6 +13,8 @@ async def test_profile_read_and_update(client):
         "role": "student",
         "is_me": False,
         "is_admin": False,
+        "school": None,
+        "academic_year": None,
     }
 
     res = await client.put(
@@ -23,6 +25,28 @@ async def test_profile_read_and_update(client):
 
     res = await client.put("/api/users/me", json={"name": "Alex"}, headers=auth(ALEX))
     assert (res.status_code, res.json()) == (400, {"error": "Name and email are required"})
+
+
+async def test_profile_school_and_academic_year(client):
+    profile = {"name": "Alex", "email": "alex@school.edu"}
+
+    res = await client.put(
+        "/api/users/me",
+        json={**profile, "school": " Greenwood High ", "academic_year": "2026-27"},
+        headers=auth(ALEX),
+    )
+    assert (res.json()["school"], res.json()["academic_year"]) == ("Greenwood High", "2026-27")
+
+    # Not sent: unchanged
+    res = await client.put("/api/users/me", json=profile, headers=auth(ALEX))
+    assert (res.json()["school"], res.json()["academic_year"]) == ("Greenwood High", "2026-27")
+
+    # Blank: cleared
+    res = await client.put("/api/users/me", json={**profile, "school": " ", "academic_year": ""}, headers=auth(ALEX))
+    assert (res.json()["school"], res.json()["academic_year"]) == (None, None)
+
+    res = await client.put("/api/users/me", json={**profile, "academic_year": "x" * 21}, headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (400, {"error": "Academic year can be at most 20 characters"})
 
 
 async def test_profile_email_cannot_collide_with_another_account(client):
