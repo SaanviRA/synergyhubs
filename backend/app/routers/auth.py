@@ -1,13 +1,14 @@
 import asyncio
 
 import asyncpg
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 
-from ..access import PENDING_APPROVAL, Conn, auto_approve_enabled
+from .. import notifications
+from ..access import PENDING_APPROVAL, Conn, User, auto_approve_enabled
 from ..config import get_settings
 from ..errors import SafeRoute, fails_with, logger
 from ..security import generate_token, hash_password, verify_password
@@ -55,10 +56,26 @@ def _session(user) -> dict:
     return {"token": generate_token(user), "user": {key: user[key] for key in USER_FIELDS}}
 
 
+async def _start_session(
+    conn, background: BackgroundTasks, user, method: str, *, added: bool = False
+) -> dict:
+    """The session, plus admin notifications for a new account and for every login token issued."""
+    if added:
+        await notifications.notify(
+            conn, background, notifications.USER_ADDED, notifications.user_added(user, method)
+        )
+    session = _session(user)
+    if "token" in session:
+        await notifications.notify(
+            conn, background, notifications.USER_LOGGED_IN, notifications.user_logged_in(user, method)
+        )
+    return session
+
+
 @router.post(
     "/signup", status_code=201, dependencies=[fails_with("Internal server error during registration")]
 )
-async def signup(body: SignupBody, conn: Conn):
+async def signup(body: SignupBody, conn: Conn, background: BackgroundTasks):
     if not body.name or not body.email or not body.password:
         raise HTTPException(status_code=400, detail="All fields are required")
     if len(body.password) < 8:
@@ -93,7 +110,7 @@ async def signup(body: SignupBody, conn: Conn):
         )
         if user is None:
             raise duplicate
-        return _session(user)
+        return await _start_session(conn, background, user, "password", added=True)
 
     try:
         user = await conn.fetchrow(
@@ -110,11 +127,11 @@ async def signup(body: SignupBody, conn: Conn):
     except asyncpg.UniqueViolationError:
         raise duplicate
 
-    return _session(user)
+    return await _start_session(conn, background, user, "password", added=True)
 
 
 @router.post("/login", dependencies=[fails_with("Internal server error during login")])
-async def login(body: LoginBody, conn: Conn):
+async def login(body: LoginBody, conn: Conn, background: BackgroundTasks):
     if not body.email or not body.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
 
@@ -135,11 +152,11 @@ async def login(body: LoginBody, conn: Conn):
     if not await verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return _session(user)
+    return await _start_session(conn, background, user, "password")
 
 
 @router.post("/google", dependencies=[fails_with("Internal server error during Google sign-in")])
-async def google_login(body: GoogleBody, conn: Conn):
+async def google_login(body: GoogleBody, conn: Conn, background: BackgroundTasks):
     if not body.idToken:
         raise HTTPException(status_code=400, detail="Google ID Token is required")
     role = _target_role(body.role)
@@ -164,12 +181,14 @@ async def google_login(body: GoogleBody, conn: Conn):
         raise invalid
 
     user = await conn.fetchrow(
-        """SELECT id, name, email, avatar, google_id, role, approved FROM users
+        """SELECT id, name, email, avatar, google_id, password_hash IS NULL AS no_password, role, approved FROM users
            WHERE (google_id = $1 OR email = $2) AND role = $3""",
         google_id,
         email,
         role,
     )
+    # A brand-new account, or an invite placeholder signing up for the first time
+    added = user is None or (not user["google_id"] and user["no_password"])
     if user is None:
         user = await conn.fetchrow(
             """INSERT INTO users (name, email, avatar, google_id, avatar_url, role, approved)
@@ -197,4 +216,14 @@ async def google_login(body: GoogleBody, conn: Conn):
             await auto_approve_enabled(conn),
         )
 
-    return _session(user)
+    return await _start_session(conn, background, user, "google", added=added)
+
+
+# Logging out only drops the token in the browser; this tells the admins who asked to know
+@router.post("/logout", dependencies=[fails_with("Internal server error during logout")])
+async def logout(conn: Conn, user: User, background: BackgroundTasks):
+    row = await conn.fetchrow("SELECT name, email, role FROM users WHERE id = $1", user.id)
+    await notifications.notify(
+        conn, background, notifications.USER_LOGGED_OUT, notifications.user_logged_out(row)
+    )
+    return {"success": True}

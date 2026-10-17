@@ -72,6 +72,10 @@ function App() {
   }, [showAccount]);
 
   const handleLogout = () => {
+    // Lets admins who asked for it hear about the logout. The fetch interceptor reads the token
+    // before it is removed below, and a failure here never stops the logout.
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    fetch(`${apiUrl}/api/auth/logout`, { method: 'POST', keepalive: true }).catch(() => {});
     localStorage.removeItem('authToken');
     localStorage.removeItem('selectedRole');
     setUser(null);

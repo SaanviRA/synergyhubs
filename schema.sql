@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS class_members CASCADE;
 DROP TABLE IF EXISTS classes CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS app_settings CASCADE;
+DROP TABLE IF EXISTS admin_webhooks CASCADE;
 
 -- 1. USERS Table
 CREATE TABLE users (
@@ -32,6 +33,16 @@ CREATE TABLE app_settings (
     key VARCHAR(100) PRIMARY KEY,
     value BOOLEAN NOT NULL,
     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 1c. ADMIN_WEBHOOKS Table: each admin's own Discord webhook and the events it receives
+CREATE TABLE admin_webhooks (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    webhook_url TEXT NOT NULL,
+    events TEXT[] NOT NULL DEFAULT ARRAY['user_added'],
+    -- Set by a successful test message; from then on the app only shows the URL's host
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

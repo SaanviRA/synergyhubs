@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 1d. Each admin's own Discord webhook and the events it receives.
+CREATE TABLE IF NOT EXISTS admin_webhooks (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    webhook_url TEXT NOT NULL,
+    events TEXT[] NOT NULL DEFAULT ARRAY['user_added'],
+    -- Set by a successful test message; from then on the app only shows the URL's host
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+-- Tables created before webhooks could be verified; their URLs stay visible until tested
+ALTER TABLE admin_webhooks ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- 2. Add visit tracking columns to project_members table.
 --    Members that predate visit tracking are backfilled as visited, once, when the
 --    column is first created. Re-running this script never resets visit status.
