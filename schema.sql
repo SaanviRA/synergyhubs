@@ -115,7 +115,10 @@ CREATE TABLE milestones (
     assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     submission_file_name VARCHAR(255),
     submission_submitted_at VARCHAR(100),
-    submission_file_url TEXT
+    submission_file_url TEXT,
+    -- When the milestone last moved to in-progress / completed
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE
 );
 
 -- 7. RESOURCES Table

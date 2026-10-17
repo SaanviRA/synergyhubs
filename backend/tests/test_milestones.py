@@ -26,6 +26,8 @@ async def test_list_milestones(client):
         "date": "Mar 11",
         "status": "completed",
         "assignee": "Everyone",
+        "startedAt": None,
+        "completedAt": None,
         "submission": {
             "fileName": "Topic_Proposal_SpaceRace.pdf",
             "submittedAt": "Mar 11, 4:30 PM",
@@ -37,14 +39,14 @@ async def test_list_milestones(client):
 
 async def test_completing_a_milestone_updates_progress_and_history(client, conn):
     res = await client.patch(f"{BASE}/2", json={"status": "completed"}, headers=auth(ALEX))
-    assert res.json() == {"success": True, "progress": 50}
+    assert res.json()["progress"] == 50
     assert await conn.fetchval("SELECT progress FROM projects WHERE id = 101") == 50
     assert await _last_log(conn) == (1, 'Completed milestone "Gather Primary Sources"', "milestone_completed")
 
     # Other status changes do not add history
     logs_before = await conn.fetchval("SELECT COUNT(*) FROM evaluation_logs")
     res = await client.patch(f"{BASE}/2", json={"status": "in-progress"}, headers=auth(ALEX))
-    assert res.json() == {"success": True, "progress": 25}
+    assert res.json()["progress"] == 25
     assert await conn.fetchval("SELECT COUNT(*) FROM evaluation_logs") == logs_before
 
 
@@ -52,7 +54,7 @@ async def test_partial_update_only_changes_fields_that_were_sent(client):
     res = await client.patch(
         f"{BASE}/3", json={"title": "Draft Intro", "date": "Mar 30", "details": None}, headers=auth(ALEX)
     )
-    assert res.json() == {"success": True, "progress": 25}
+    assert res.json() == {"success": True, "progress": 25, "startedAt": None, "completedAt": None}
     milestone = (await client.get(BASE, headers=auth(ALEX))).json()[2]
     assert (milestone["title"], milestone["date"], milestone["details"], milestone["status"]) == (
         "Draft Intro",
@@ -64,7 +66,35 @@ async def test_partial_update_only_changes_fields_that_were_sent(client):
     assert (await client.patch(f"{BASE}/3", json={}, headers=auth(ALEX))).json() == {
         "success": True,
         "progress": 25,
+        "startedAt": None,
+        "completedAt": None,
     }
+
+
+async def test_status_changes_record_when_they_happened(client):
+    async def set_status(status):
+        res = await client.patch(f"{BASE}/3", json={"status": status}, headers=auth(ALEX))
+        return res.json()["startedAt"], res.json()["completedAt"]
+
+    started, completed = await set_status("in-progress")
+    assert started and completed is None
+    # Re-sending the same status keeps the original time
+    assert await set_status("in-progress") == (started, None)
+
+    started_again, completed = await set_status("completed")
+    assert started_again == started and completed
+    milestone = (await client.get(BASE, headers=auth(ALEX))).json()[2]
+    assert (milestone["startedAt"], milestone["completedAt"]) == (started, completed)
+
+    # Moving back clears the later stages
+    assert await set_status("in-progress") == (started, None)
+    assert await set_status("pending") == (None, None)
+
+
+async def test_submitting_records_completion_time(client):
+    await client.post(f"{BASE}/2/submit", json={"fileName": "Sources.pdf"}, headers=auth(ALEX))
+    milestone = (await client.get(BASE, headers=auth(ALEX))).json()[1]
+    assert milestone["completedAt"]
 
 
 async def test_update_validation(client):
@@ -135,6 +165,8 @@ async def test_members_add_events_after_the_project_is_created(client):
         "dueOn": f"{year}-03-14",
         "status": "pending",
         "assignee": "Everyone",
+        "startedAt": None,
+        "completedAt": None,
         "submission": None,
     }
     # 1 of 5 milestones is now completed

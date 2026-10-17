@@ -49,7 +49,12 @@ async def _milestone_title(conn, project_id: int, milestone_id: int) -> str:
 
 
 MILESTONE_COLUMNS = """id, title, details, due_date, due_on, status, assigned_to,
-                       submission_file_name, submission_submitted_at, submission_file_url"""
+                       submission_file_name, submission_submitted_at, submission_file_url,
+                       started_at, completed_at"""
+
+
+def _iso(timestamp) -> str | None:
+    return timestamp.isoformat() if timestamp else None
 
 
 def _milestone(row) -> dict:
@@ -61,6 +66,8 @@ def _milestone(row) -> dict:
         "dueOn": row["due_on"].isoformat() if row["due_on"] else None,
         "status": row["status"],
         "assignee": row["assigned_to"],
+        "startedAt": _iso(row["started_at"]),
+        "completedAt": _iso(row["completed_at"]),
         "submission": {
             "fileName": row["submission_file_name"],
             "submittedAt": row["submission_submitted_at"],
@@ -123,6 +130,28 @@ async def update_milestone(
 
     title = await _milestone_title(conn, projectId, milestoneId)
 
+    # Stamp when the milestone moves to in-progress or completed. Re-sending the current status
+    # keeps the original time; moving back clears the stamps of the later stages.
+    # (SET expressions see the row's old status.)
+    if "status" in body.model_fields_set:
+        await conn.execute(
+            """UPDATE milestones
+               SET started_at = CASE
+                       WHEN status = $1 THEN started_at
+                       WHEN $1 = 'in-progress' THEN now()
+                       WHEN $1 = 'pending' THEN NULL
+                       ELSE started_at END,
+                   completed_at = CASE
+                       WHEN status = $1 THEN completed_at
+                       WHEN $1 = 'completed' THEN now()
+                       WHEN $1 IN ('pending', 'in-progress') THEN NULL
+                       ELSE completed_at END
+               WHERE id = $2 AND project_id = $3""",
+            body.status,
+            milestoneId,
+            projectId,
+        )
+
     # Only the fields present in the request are updated
     updates = {
         UPDATABLE_COLUMNS[field]: getattr(body, field)
@@ -155,7 +184,15 @@ async def update_milestone(
             short_date(),
         )
 
-    return {"success": True, "progress": progress}
+    stamps = await conn.fetchrow(
+        "SELECT started_at, completed_at FROM milestones WHERE id = $1", milestoneId
+    )
+    return {
+        "success": True,
+        "progress": progress,
+        "startedAt": _iso(stamps["started_at"]),
+        "completedAt": _iso(stamps["completed_at"]),
+    }
 
 
 # Submit work for a milestone
@@ -170,6 +207,7 @@ async def submit_milestone(projectId: int, milestoneId: int, body: SubmissionBod
     await conn.execute(
         """UPDATE milestones
            SET status = 'completed',
+               completed_at = CASE WHEN status = 'completed' THEN completed_at ELSE now() END,
                submission_file_name = $1,
                submission_submitted_at = $2,
                submission_file_url = $3

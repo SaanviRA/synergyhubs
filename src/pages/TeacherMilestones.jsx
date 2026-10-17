@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, CheckCircle2, Clock, AlertCircle, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2, Plus } from 'lucide-react';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
 import AddEventModal from '../components/AddEventModal';
+import { formatChangedAt, statusChangedTitle } from '../utils/statusChangedAt';
 
 export default function TeacherMilestones({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [expandedId, setExpandedId] = useState(null);
@@ -48,7 +49,9 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
       });
       if (res.ok) {
         const data = await res.json();
-        setMilestones(prev => prev.map(m => m.id === milestoneId ? { ...m, status: newStatus } : m));
+        setMilestones(prev => prev.map(m => m.id === milestoneId
+          ? { ...m, status: newStatus, startedAt: data.startedAt, completedAt: data.completedAt }
+          : m));
         if (data.progress !== undefined && onUpdateProject) {
           onUpdateProject({ progress: data.progress });
         }
@@ -240,6 +243,7 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
                               </button>
                               <button
                                 onClick={(e) => handleUpdateStatus(ms.id, 'in-progress', e)}
+                                title={statusChangedTitle('In Progress', ms.startedAt)}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                                   ms.status === 'in-progress'
                                     ? 'bg-indigo-600 text-white shadow-sm font-semibold'
@@ -250,6 +254,7 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
                               </button>
                               <button
                                 onClick={(e) => handleUpdateStatus(ms.id, 'completed', e)}
+                                title={statusChangedTitle('Completed', ms.completedAt)}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                                   ms.status === 'completed'
                                     ? 'bg-emerald-600 text-white shadow-sm font-semibold'
@@ -260,6 +265,12 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
                               </button>
                             </div>
                           </div>
+                          {(ms.startedAt || ms.completedAt) && (
+                            <div className="-mt-2 mb-4 text-[11px] text-surface-500 space-y-0.5">
+                              {ms.startedAt && <p>Moved to In Progress on {formatChangedAt(ms.startedAt)}</p>}
+                              {ms.completedAt && <p>Completed on {formatChangedAt(ms.completedAt)}</p>}
+                            </div>
+                          )}
                           {ms.submission ? (
                             <div className="space-y-4">
                               <div>

@@ -148,6 +148,11 @@ BEGIN
     END LOOP;
 END $$;
 
+-- 2e. Remember when a milestone moved to in-progress and to completed, so the timeline can show it.
+--     Milestones changed before this have no record of when, so they stay NULL.
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';
