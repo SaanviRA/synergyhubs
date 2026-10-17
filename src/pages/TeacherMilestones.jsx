@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, CheckCircle2, Clock, AlertCircle, Sparkles, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2 } from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, AlertCircle, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2 } from 'lucide-react';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
 
 export default function TeacherMilestones({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
-  const [showAiPrompt, setShowAiPrompt] = useState(false);
-  const [aiText, setAiText] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   
   const [milestones, setMilestones] = useState([]);
@@ -150,47 +148,7 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
           <h1 className="text-3xl font-heading font-bold text-surface-900 tracking-tight font-bold">Timeline (Teacher View)</h1>
           <p className="text-surface-600 mt-1">{projectData ? projectData.name : 'Manage project micro-milestones'}</p>
         </div>
-        <button 
-          onClick={() => setShowAiPrompt(!showAiPrompt)}
-          className="bg-brand-100 text-brand-700 px-4 py-2 flex items-center gap-2 rounded-xl font-medium hover:bg-brand-200 transition-colors active:scale-95"
-        >
-          <Sparkles size={18} className="text-brand-600" />
-          <span className="hidden sm:inline">AI Assistant</span>
-        </button>
       </div>
-
-      {showAiPrompt && (
-        <div className="bg-gradient-to-br from-brand-600 to-brand-800 rounded-2xl p-6 shadow-xl shadow-brand-500/20 mb-8 animate-in zoom-in-95 duration-200 text-white">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-white/20 rounded-xl glass shrink-0">
-              <Sparkles size={24} className="text-white" />
-            </div>
-            <div className="flex-1 space-y-3">
-              <h3 className="font-heading font-bold text-xl">Generate a Timeline</h3>
-              <p className="text-brand-100 text-sm">Paste your rubric or assignment prompt here, and I'll generate a list of micro-milestones for your team.</p>
-              <div className="relative">
-                <textarea 
-                  value={aiText}
-                  onChange={(e) => setAiText(e.target.value)}
-                  placeholder="e.g. 10 page research paper about the Cold War with a presentation component..."
-                  className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white placeholder-brand-300/60 focus:outline-none focus:ring-2 focus:ring-white/50 min-h-[100px] resize-none"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button 
-                  onClick={() => setShowAiPrompt(false)}
-                  className="px-4 py-2 rounded-xl font-medium text-brand-100 hover:bg-white/10 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button className="bg-white text-brand-900 px-6 py-2 rounded-xl font-medium hover:bg-surface-50 transition-colors shadow-sm active:scale-95">
-                  Generate Milestones
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="relative mt-8 ml-3 sm:ml-0">
         {/* Vertical Line */}
