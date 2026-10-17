@@ -55,6 +55,27 @@ async def save_workspace(projectId: int, body: WorkspaceBody, conn: Conn, user: 
     return dict(row)
 
 
+MAX_TITLE_LENGTH = 200
+
+
+# Rename workspace
+@router.patch("/workspaces/{workspaceId}", dependencies=[fails_with("Server error renaming workspace")])
+async def rename_workspace(workspaceId: int, body: WorkspaceBody, conn: Conn, user: User):
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    if len(title) > MAX_TITLE_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Titles can be at most {MAX_TITLE_LENGTH} characters")
+    await _ensure_workspace_access(conn, workspaceId, user.id)
+
+    row = await conn.fetchrow(
+        "UPDATE workspaces SET title = $1 WHERE id = $2 RETURNING id, title, type, url, creator, date",
+        title,
+        workspaceId,
+    )
+    return dict(row)
+
+
 # Delete workspace
 @router.delete("/workspaces/{workspaceId}", dependencies=[fails_with("Server error deleting workspace")])
 async def delete_workspace(workspaceId: int, conn: Conn, user: User):

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard, MessageSquare, Pencil } from 'lucide-react';
 import WorkspaceChat from '../components/WorkspaceChat';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
+import { defaultWorkspaceTitle } from '../utils/workspaceTitle';
 
 export default function Workspaces({ classData, projectData, onBack }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -20,6 +21,9 @@ export default function Workspaces({ classData, projectData, onBack }) {
   // The workspace whose chat is open in the right sidebar
   const [chatWorkspace, setChatWorkspace] = useState(null);
   const closeChat = useCallback(() => setChatWorkspace(null), []);
+  // The workspace whose title is being edited, and the draft title
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
 
   const fetchWorkspaces = useCallback(async () => {
     if (!projectData?.id) return;
@@ -46,6 +50,35 @@ export default function Workspaces({ classData, projectData, onBack }) {
     setChatWorkspace((current) => (current?.id === ws.id ? null : ws));
   };
 
+  const handleStartRename = (ws, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingId(ws.id);
+    setEditTitle(ws.title);
+  };
+
+  const handleRenameWorkspace = async () => {
+    const id = editingId;
+    const title = editTitle.trim();
+    setEditingId(null);
+    const current = workspaces.find((ws) => ws.id === id);
+    if (!current || !title || title === current.title) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/workspaces/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setWorkspaces((list) => list.map((ws) => (ws.id === id ? updated : ws)));
+        setChatWorkspace((open) => (open?.id === id ? updated : open));
+      }
+    } catch (err) {
+      console.error('Error renaming workspace:', err);
+    }
+  };
+
   const handleDeleteWorkspace = async (workspaceToDelete, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -65,8 +98,7 @@ export default function Workspaces({ classData, projectData, onBack }) {
   const handleSaveWorkspace = async () => {
     if (!newUrl.trim()) return;
     
-    let defaultTitle = newUrl.replace(/^https?:\/\//, '').split('/')[0] || newUrl;
-    if (defaultTitle.length > 30) defaultTitle = defaultTitle.substring(0, 30) + '...';
+    const defaultTitle = defaultWorkspaceTitle(newUrl, workspaces.map((ws) => ws.title));
 
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/workspaces`, {
@@ -276,9 +308,9 @@ export default function Workspaces({ classData, projectData, onBack }) {
           </div>
 
           <div className="grid gap-3">
-            {filteredWorkspaces.map((ws, i) => (
+            {filteredWorkspaces.map((ws) => (
               <a 
-                key={i} 
+                key={ws.id} 
                 href={ws.url || '#'} 
                 target={ws.url ? "_blank" : "_self"}
                 rel="noopener noreferrer"
@@ -290,7 +322,24 @@ export default function Workspaces({ classData, projectData, onBack }) {
                   {getIcon(ws.type)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-surface-900 truncate">{ws.title}</h3>
+                  {editingId === ws.id ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editTitle}
+                      maxLength={200}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameWorkspace();
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      onBlur={handleRenameWorkspace}
+                      className="w-full font-medium text-surface-900 bg-white border border-surface-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                    />
+                  ) : (
+                    <h3 className="font-medium text-surface-900 truncate">{ws.title}</h3>
+                  )}
                   <p className="text-sm text-surface-500 flex items-center gap-2">
                     <span>{ws.creator}</span>
                     <span>•</span>
@@ -310,6 +359,13 @@ export default function Workspaces({ classData, projectData, onBack }) {
                     title="Chat about this document"
                   >
                     <MessageSquare size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => handleStartRename(ws, e)}
+                    className="p-2 text-surface-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors cursor-pointer"
+                    title="Rename workspace"
+                  >
+                    <Pencil size={18} />
                   </button>
                   <div className="hidden sm:flex text-brand-600 px-3 py-1 rounded-full bg-brand-50 text-sm font-medium">
                     Open
