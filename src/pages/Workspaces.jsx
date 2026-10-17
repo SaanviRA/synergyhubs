@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard, MessageSquare } from 'lucide-react';
+import WorkspaceChat from '../components/WorkspaceChat';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
 
 export default function Workspaces({ classData, projectData, onBack }) {
@@ -16,6 +17,9 @@ export default function Workspaces({ classData, projectData, onBack }) {
 
   const [workspaces, setWorkspaces] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  // The workspace whose chat is open in the right sidebar
+  const [chatWorkspace, setChatWorkspace] = useState(null);
+  const closeChat = useCallback(() => setChatWorkspace(null), []);
 
   const fetchWorkspaces = useCallback(async () => {
     if (!projectData?.id) return;
@@ -36,6 +40,12 @@ export default function Workspaces({ classData, projectData, onBack }) {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
+  const handleOpenChat = (ws, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setChatWorkspace((current) => (current?.id === ws.id ? null : ws));
+  };
+
   const handleDeleteWorkspace = async (workspaceToDelete, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -44,6 +54,7 @@ export default function Workspaces({ classData, projectData, onBack }) {
         method: 'DELETE'
       });
       if (res.ok) {
+        setChatWorkspace((current) => (current?.id === workspaceToDelete.id ? null : current));
         await fetchWorkspaces();
       }
     } catch (err) {
@@ -154,6 +165,7 @@ export default function Workspaces({ classData, projectData, onBack }) {
   });
 
   return (
+    <div className={`transition-[padding] duration-200 ${chatWorkspace ? 'lg:pr-96' : ''}`}>
     <div className="pt-6 sm:pt-24 pb-24 px-4 max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
       {/* Back Navigation */}
@@ -270,7 +282,9 @@ export default function Workspaces({ classData, projectData, onBack }) {
                 href={ws.url || '#'} 
                 target={ws.url ? "_blank" : "_self"}
                 rel="noopener noreferrer"
-                className="glass rounded-xl p-4 flex items-center gap-4 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer group"
+                className={`glass rounded-xl p-4 flex items-center gap-4 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer group ${
+                  chatWorkspace?.id === ws.id ? 'ring-2 ring-brand-500/60' : ''
+                }`}
               >
                 <div className="p-3 bg-white rounded-lg border border-surface-100 group-hover:border-surface-200 transition-colors">
                   {getIcon(ws.type)}
@@ -283,7 +297,20 @@ export default function Workspaces({ classData, projectData, onBack }) {
                     <span>{ws.date}</span>
                   </p>
                 </div>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
+                <div className={`flex items-center gap-2 group-hover:opacity-100 transition-all z-10 ${
+                  chatWorkspace?.id === ws.id ? 'opacity-100' : 'opacity-0'
+                }`}>
+                  <button
+                    onClick={(e) => handleOpenChat(ws, e)}
+                    className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                      chatWorkspace?.id === ws.id
+                        ? 'text-brand-600 bg-brand-50'
+                        : 'text-surface-400 hover:text-brand-600 hover:bg-brand-50'
+                    }`}
+                    title="Chat about this document"
+                  >
+                    <MessageSquare size={18} />
+                  </button>
                   <div className="hidden sm:flex text-brand-600 px-3 py-1 rounded-full bg-brand-50 text-sm font-medium">
                     Open
                   </div>
@@ -315,6 +342,11 @@ export default function Workspaces({ classData, projectData, onBack }) {
           />
         </drive-picker>
       )}
+    </div>
+
+    {chatWorkspace && (
+      <WorkspaceChat key={chatWorkspace.id} workspace={chatWorkspace} onClose={closeChat} accent="brand" />
+    )}
     </div>
   );
 }

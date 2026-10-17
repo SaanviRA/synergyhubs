@@ -1,5 +1,6 @@
 -- Drop tables if they exist to start fresh
 DROP TABLE IF EXISTS evaluation_logs CASCADE;
+DROP TABLE IF EXISTS workspace_messages CASCADE;
 DROP TABLE IF EXISTS workspaces CASCADE;
 DROP TABLE IF EXISTS resources CASCADE;
 DROP TABLE IF EXISTS milestones CASCADE;
@@ -130,6 +131,17 @@ CREATE TABLE workspaces (
     date VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 8b. Chat about a workspace document. Each conversation belongs to one workspace.
+CREATE TABLE workspace_messages (
+    id SERIAL PRIMARY KEY,
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    author VARCHAR(100) NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX workspace_messages_workspace_id_idx ON workspace_messages (workspace_id, id);
 
 -- 9. EVALUATION_LOGS Table
 CREATE TABLE evaluation_logs (

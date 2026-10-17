@@ -62,6 +62,17 @@ CREATE TABLE IF NOT EXISTS admin_webhooks (
 -- Tables created before webhooks could be verified; their URLs stay visible until tested
 ALTER TABLE admin_webhooks ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- 1e. Chat about a workspace document. Each conversation belongs to one workspace.
+CREATE TABLE IF NOT EXISTS workspace_messages (
+    id SERIAL PRIMARY KEY,
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    author VARCHAR(100) NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS workspace_messages_workspace_id_idx ON workspace_messages (workspace_id, id);
+
 -- 2. Add visit tracking columns to project_members table.
 --    Members that predate visit tracking are backfilled as visited, once, when the
 --    column is first created. Re-running this script never resets visit status.
