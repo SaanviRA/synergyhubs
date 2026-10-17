@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard, MessageSquare, Pencil } from 'lucide-react';
 import WorkspaceChat from '../components/WorkspaceChat';
+import UnreadBadge from '../components/UnreadBadge';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
 import { defaultWorkspaceTitle } from '../utils/workspaceTitle';
 
-export default function TeacherWorkspaces({ classData, projectData, onBack }) {
+export default function TeacherWorkspaces({ classData, projectData, onBack, onUnreadChange }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newUrl, setNewUrl] = useState('');
@@ -20,7 +21,6 @@ export default function TeacherWorkspaces({ classData, projectData, onBack }) {
   const [isLoading, setIsLoading] = useState(true);
   // The workspace whose chat is open in the right sidebar
   const [chatWorkspace, setChatWorkspace] = useState(null);
-  const closeChat = useCallback(() => setChatWorkspace(null), []);
   // The workspace whose title is being edited, and the draft title
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
@@ -40,14 +40,37 @@ export default function TeacherWorkspaces({ classData, projectData, onBack }) {
     }
   }, [projectData?.id]);
 
-  useEffect(() => {
+  // Refresh on close: counts fetched while the chat was open may predate reading it
+  const closeChat = useCallback(() => {
+    setChatWorkspace(null);
     fetchWorkspaces();
   }, [fetchWorkspaces]);
+
+  // Poll so unread chat counts stay current
+  useEffect(() => {
+    fetchWorkspaces();
+    const timer = setInterval(fetchWorkspaces, 10000);
+    return () => clearInterval(timer);
+  }, [fetchWorkspaces]);
+
+  // The open chat is being read, so it never counts as unread
+  const unreadFor = useCallback(
+    (ws) => (chatWorkspace?.id === ws.id ? 0 : ws.unread || 0),
+    [chatWorkspace?.id]
+  );
+  const totalUnread = workspaces.reduce((sum, ws) => sum + unreadFor(ws), 0);
+  useEffect(() => {
+    if (!isLoading) onUnreadChange?.(totalUnread);
+  }, [totalUnread, isLoading, onUnreadChange]);
 
   const handleOpenChat = (ws, e) => {
     e.preventDefault();
     e.stopPropagation();
-    setChatWorkspace((current) => (current?.id === ws.id ? null : ws));
+    if (chatWorkspace?.id === ws.id) {
+      closeChat();
+    } else {
+      setChatWorkspace(ws);
+    }
   };
 
   const handleStartRename = (ws, e) => {
@@ -319,8 +342,9 @@ export default function TeacherWorkspaces({ classData, projectData, onBack }) {
                   chatWorkspace?.id === ws.id ? 'ring-2 ring-indigo-500/60' : ''
                 }`}
               >
-                <div className="p-3 bg-white rounded-lg border border-surface-100 group-hover:border-surface-200 transition-colors">
+                <div className="relative p-3 bg-white rounded-lg border border-surface-100 group-hover:border-surface-200 transition-colors">
                   {getIcon(ws.type)}
+                  <UnreadBadge count={unreadFor(ws)} />
                 </div>
                 <div className="flex-1 min-w-0">
                   {editingId === ws.id ? (

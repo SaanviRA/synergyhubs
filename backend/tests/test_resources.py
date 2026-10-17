@@ -29,7 +29,9 @@ async def test_create_list_delete(client, plural, single, owner, body):
     assert res.status_code == 200
     created = res.json()
     # The owner name comes from the token, never from the request
-    assert created == {**body, "id": created["id"], owner: "Alex M.", "date": today_label()}
+    expected = {**body, "id": created["id"], owner: "Alex M.", "date": today_label()}
+    # Workspaces also carry the caller's unread chat count
+    assert created == ({**expected, "unread": 0} if plural == "workspaces" else expected)
 
     listed = (await client.get(base, headers=auth(ALEX))).json()
     assert listed == [created, *before]

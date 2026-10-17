@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS workspace_messages (
 );
 CREATE INDEX IF NOT EXISTS workspace_messages_workspace_id_idx ON workspace_messages (workspace_id, id);
 
+-- 1f. How far each person has read each workspace's chat, for unread counts.
+CREATE TABLE IF NOT EXISTS workspace_reads (
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    last_read_id INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (workspace_id, user_id)
+);
+
 -- 2. Add visit tracking columns to project_members table.
 --    Members that predate visit tracking are backfilled as visited, once, when the
 --    column is first created. Re-running this script never resets visit status.

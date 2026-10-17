@@ -37,6 +37,30 @@ function App() {
 
   const isTeacher = user?.role === 'teacher';
 
+  // Unread workspace chat messages in the open project, shown on the Workspaces tab
+  const [workspaceUnread, setWorkspaceUnread] = useState(0);
+  const projectId = selectedProject?.id;
+  useEffect(() => {
+    setWorkspaceUnread(0);
+    if (!projectId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+        const res = await fetch(`${apiUrl}/api/projects/${projectId}/workspaces/unread`);
+        if (res.ok && active) setWorkspaceUnread((await res.json()).total);
+      } catch {
+        // Keep the last count; the next poll will try again
+      }
+    };
+    load();
+    const timer = setInterval(load, 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [projectId]);
+
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('authToken');
@@ -175,7 +199,7 @@ function App() {
         case 'Resources':
           return <TeacherResources classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
         case 'Workspaces':
-          return <TeacherWorkspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+          return <TeacherWorkspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} onUnreadChange={setWorkspaceUnread} />;
         case 'Team':
           return (
             <TeacherTeam 
@@ -223,7 +247,7 @@ function App() {
       case 'Resources':
         return <Resources classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
       case 'Workspaces':
-        return <Workspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} />;
+        return <Workspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} onUnreadChange={setWorkspaceUnread} />;
       case 'Team':
         return (
           <Team 
@@ -293,6 +317,7 @@ function App() {
           onChange={setActiveTab} 
           onProfileClick={() => setShowAccount(true)} 
           userAvatar={userAvatar}
+          badges={{ Workspaces: workspaceUnread }}
         />
       )}
       

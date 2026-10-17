@@ -16,17 +16,40 @@ class WorkspaceBody(BaseModel):
     url: str | None = None
 
 
-# Fetch workspaces
+# Messages in workspace w.id that the caller ($2) has not read. Their own messages never count.
+UNREAD = """(SELECT COUNT(*) FROM workspace_messages m
+             LEFT JOIN workspace_reads r ON r.workspace_id = m.workspace_id AND r.user_id = $2
+             WHERE m.workspace_id = w.id AND m.id > COALESCE(r.last_read_id, 0)
+               AND m.user_id IS DISTINCT FROM $2)"""
+
+
+# Fetch workspaces, each with the caller's unread chat count
 @router.get(
     "/projects/{projectId}/workspaces",
     dependencies=[fails_with("Server error fetching workspaces"), ProjectAccess],
 )
-async def get_workspaces(projectId: int, conn: Conn):
+async def get_workspaces(projectId: int, conn: Conn, user: User):
     rows = await conn.fetch(
-        "SELECT id, title, type, url, creator, date FROM workspaces WHERE project_id = $1 ORDER BY id DESC",
+        f"""SELECT w.id, w.title, w.type, w.url, w.creator, w.date, {UNREAD} AS unread
+            FROM workspaces w WHERE w.project_id = $1 ORDER BY w.id DESC""",
         projectId,
+        user.id,
     )
     return [dict(row) for row in rows]
+
+
+# Total unread chat messages across the project's workspaces (for the Workspaces tab badge)
+@router.get(
+    "/projects/{projectId}/workspaces/unread",
+    dependencies=[fails_with("Server error fetching unread messages"), ProjectAccess],
+)
+async def get_unread_total(projectId: int, conn: Conn, user: User):
+    total = await conn.fetchval(
+        f"SELECT COALESCE(SUM({UNREAD}), 0) FROM workspaces w WHERE w.project_id = $1",
+        projectId,
+        user.id,
+    )
+    return {"total": total}
 
 
 # Save workspace
@@ -43,7 +66,7 @@ async def save_workspace(projectId: int, body: WorkspaceBody, conn: Conn, user: 
     row = await conn.fetchrow(
         """INSERT INTO workspaces (project_id, title, type, url, creator, creator_id, date)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING id, title, type, url, creator, date""",
+           RETURNING id, title, type, url, creator, date, 0 AS unread""",
         projectId,
         body.title,
         body.type,
@@ -69,8 +92,10 @@ async def rename_workspace(workspaceId: int, body: WorkspaceBody, conn: Conn, us
     await _ensure_workspace_access(conn, workspaceId, user.id)
 
     row = await conn.fetchrow(
-        "UPDATE workspaces SET title = $1 WHERE id = $2 RETURNING id, title, type, url, creator, date",
+        f"""UPDATE workspaces w SET title = $1 WHERE id = $3
+            RETURNING id, title, type, url, creator, date, {UNREAD} AS unread""",
         title,
+        user.id,
         workspaceId,
     )
     return dict(row)
@@ -119,7 +144,7 @@ MESSAGE_COLUMNS = "m.id, m.user_id, m.author, u.avatar, m.body, m.created_at"
 
 
 # Fetch messages, oldest first. With `after`, only messages newer than that ID (used for polling);
-# without it, the latest page.
+# without it, the latest page. Whatever is returned counts as read.
 @router.get("/workspaces/{workspaceId}/messages", dependencies=[fails_with("Server error fetching messages")])
 async def get_messages(workspaceId: int, conn: Conn, user: User, after: int = 0):
     await _ensure_workspace_access(conn, workspaceId, user.id)
@@ -139,6 +164,15 @@ async def get_messages(workspaceId: int, conn: Conn, user: User, after: int = 0)
                 ) latest ORDER BY id""",
             workspaceId,
             MESSAGE_PAGE,
+        )
+    if rows:
+        await conn.execute(
+            """INSERT INTO workspace_reads (workspace_id, user_id, last_read_id) VALUES ($1, $2, $3)
+               ON CONFLICT (workspace_id, user_id)
+               DO UPDATE SET last_read_id = GREATEST(workspace_reads.last_read_id, EXCLUDED.last_read_id)""",
+            workspaceId,
+            user.id,
+            rows[-1]["id"],
         )
     return [_message(row, user.id) for row in rows]
 

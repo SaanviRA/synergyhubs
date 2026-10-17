@@ -1,5 +1,6 @@
 -- Drop tables if they exist to start fresh
 DROP TABLE IF EXISTS evaluation_logs CASCADE;
+DROP TABLE IF EXISTS workspace_reads CASCADE;
 DROP TABLE IF EXISTS workspace_messages CASCADE;
 DROP TABLE IF EXISTS workspaces CASCADE;
 DROP TABLE IF EXISTS resources CASCADE;
@@ -151,6 +152,14 @@ CREATE TABLE workspace_messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX workspace_messages_workspace_id_idx ON workspace_messages (workspace_id, id);
+
+-- 8c. How far each person has read each workspace's chat, for unread counts.
+CREATE TABLE workspace_reads (
+    workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    last_read_id INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (workspace_id, user_id)
+);
 
 -- 9. EVALUATION_LOGS Table
 CREATE TABLE evaluation_logs (

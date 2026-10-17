@@ -1,7 +1,9 @@
 import React from 'react';
 import { Home, Calendar, BookOpen, Users, LayoutGrid } from 'lucide-react';
+import UnreadBadge from '../UnreadBadge';
 
-export function BottomNav({ activeTab, onChange, onProfileClick, userAvatar = 'JD' }) {
+// `badges` maps a tab name to an unread count shown on its icon
+export function BottomNav({ activeTab, onChange, onProfileClick, userAvatar = 'JD', badges = {} }) {
   const tabs = [
     { name: 'Dashboard', icon: Home, active: true },
     { name: 'Timeline', icon: Calendar, active: false },
@@ -23,7 +25,10 @@ export function BottomNav({ activeTab, onChange, onProfileClick, userAvatar = 'J
                 : 'text-surface-500 hover:text-surface-700'
             }`}
           >
-            <tab.icon size={22} className={activeTab === tab.name ? 'stroke-[2.5px]' : ''} />
+            <span className="relative">
+              <tab.icon size={22} className={activeTab === tab.name ? 'stroke-[2.5px]' : ''} />
+              <UnreadBadge count={badges[tab.name]} />
+            </span>
             <span className="text-[10px] font-medium">{tab.name}</span>
           </button>
         ))}
