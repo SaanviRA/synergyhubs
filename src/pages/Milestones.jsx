@@ -1,24 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, CheckCircle2, Clock, AlertCircle, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2, Plus } from 'lucide-react';
-import { getGoogleCredentials } from '../utils/googleDriveConfig';
+import React, { useState, useEffect, useCallback } from 'react';
+import { CheckCircle2, Clock, AlertCircle, ArrowLeft, ChevronDown, Plus } from 'lucide-react';
 import AddEventModal from '../components/AddEventModal';
 import { formatChangedAt, statusChangedTitle } from '../utils/statusChangedAt';
 
 export default function Milestones({ classData, projectData, onBack, onNavigate, onUpdateProject }) {
   const [expandedId, setExpandedId] = useState(null);
   const [showAddEvent, setShowAddEvent] = useState(false);
-  const [showManualSubmitModal, setShowManualSubmitModal] = useState(false);
-  const [manualFileName, setManualFileName] = useState('');
-  const [manualFileUrl, setManualFileUrl] = useState('');
-  const [targetMilestoneId, setTargetMilestoneId] = useState(null);
-  
+
   const [milestones, setMilestones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const [creds] = useState(getGoogleCredentials());
-  const [isPickerActive, setIsPickerActive] = useState(false);
-  const [submittingMilestoneId, setSubmittingMilestoneId] = useState(null);
-  const pickerNodeRef = useRef(null);
 
   const fetchMilestones = useCallback(async () => {
     if (!projectData?.id) return;
@@ -64,99 +54,6 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
       console.error('Error updating milestone status:', err);
     }
   };
-
-  const handleOpenDrivePicker = (milestoneId) => {
-    if (!creds.clientId || !creds.appId || !creds.developerKey) {
-      // Fallback to manual submission dialog if Drive credentials are not set
-      setTargetMilestoneId(milestoneId);
-      setShowManualSubmitModal(true);
-      return;
-    }
-    setSubmittingMilestoneId(milestoneId);
-    setIsPickerActive(true);
-  };
-
-  const handleManualSubmit = async () => {
-    if (!manualFileName.trim() || !targetMilestoneId) return;
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/milestones/${targetMilestoneId}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fileName: manualFileName.trim(),
-          fileUrl: manualFileUrl.trim() || '#'
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        await fetchMilestones();
-        if (data.progress !== undefined && onUpdateProject) {
-          onUpdateProject({ progress: data.progress });
-        }
-        setShowManualSubmitModal(false);
-        setManualFileName('');
-        setManualFileUrl('');
-        setTargetMilestoneId(null);
-      }
-    } catch (err) {
-      console.error('Error submitting file:', err);
-    }
-  };
-
-  useEffect(() => {
-    if (!isPickerActive) return;
-    const node = pickerNodeRef.current;
-    if (!node) return;
-
-    // Auto-trigger open when the element mounts (deferred to avoid synchronous render issues)
-    const openTimer = setTimeout(() => {
-      if (node && typeof node.open === 'function') {
-        node.open();
-      }
-    }, 0);
-
-    const handlePicked = async (event) => {
-      const selectedDocs = event.detail.docs;
-      if (selectedDocs && selectedDocs.length > 0 && submittingMilestoneId) {
-        try {
-          const doc = selectedDocs[0];
-          const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/milestones/${submittingMilestoneId}/submit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              fileName: doc.name,
-              fileUrl: doc.url
-            })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            await fetchMilestones();
-            if (data.progress !== undefined && onUpdateProject) {
-              onUpdateProject({ progress: data.progress });
-            }
-          }
-        } catch (err) {
-          console.error('Error submitting picked document:', err);
-        }
-      }
-      setIsPickerActive(false);
-      setSubmittingMilestoneId(null);
-    };
-
-    const handleCanceled = () => {
-      setIsPickerActive(false);
-      setSubmittingMilestoneId(null);
-    };
-
-    node.addEventListener('picker:picked', handlePicked);
-    node.addEventListener('picker:canceled', handleCanceled);
-
-    return () => {
-      clearTimeout(openTimer);
-      node.removeEventListener('picker:picked', handlePicked);
-      node.removeEventListener('picker:canceled', handleCanceled);
-    };
-  }, [isPickerActive, submittingMilestoneId, projectData?.id, fetchMilestones, onUpdateProject]);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -245,22 +142,13 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
                     <h3 className="text-lg font-bold text-surface-900 mb-1 leading-tight">{ms.title}</h3>
                     <p className="text-surface-600 text-sm mb-4 leading-relaxed">{ms.details}</p>
                     
-                    {ms.submission && (
-                      <div className={`flex items-center gap-2 ${isLeft ? 'sm:justify-end' : ''}`}>
-                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                          <CheckCircle2 size={12} />
-                          Submitted
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Expandable Submission Area */}
+                    {/* Expandable Status Area */}
                     <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0'} pt-0`}>
                       <div className="overflow-hidden">
                         <div className={`pt-5 border-t border-surface-200/60 ${isLeft ? 'sm:text-right' : 'sm:text-left'} text-left`}>
                           
                           {/* Quick Status Toggles for Team */}
-                          <div className="mb-4 pb-4 border-b border-surface-200/60 flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
                             <div>
                               <p className="text-xs font-bold text-surface-600 uppercase tracking-wider">Milestone Status</p>
                               <p className="text-[11px] text-surface-400">Shared progress across entire team</p>
@@ -301,110 +189,9 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
                             </div>
                           </div>
                           {(ms.startedAt || ms.completedAt) && (
-                            <div className="-mt-2 mb-4 text-[11px] text-surface-500 space-y-0.5">
+                            <div className="mt-2 text-[11px] text-surface-500 space-y-0.5">
                               {ms.startedAt && <p>Moved to In Progress on {formatChangedAt(ms.startedAt)}</p>}
                               {ms.completedAt && <p>Completed on {formatChangedAt(ms.completedAt)}</p>}
-                            </div>
-                          )}
-
-                          {ms.submission ? (
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2.5 flex items-center gap-2 before:content-[''] before:w-1 before:h-3 before:bg-brand-400 before:rounded-full">
-                                  Submitted Workspace
-                                </p>
-                                <div 
-                                  onClick={(e) => {
-                                    if (ms.submission.fileUrl) {
-                                      e.stopPropagation();
-                                      window.open(ms.submission.fileUrl, '_blank', 'noopener,noreferrer');
-                                    }
-                                  }}
-                                  className={`flex items-center gap-3 p-3.5 bg-surface-50/80 rounded-xl border border-surface-200 hover:border-brand-200 hover:bg-brand-50/50 transition-colors group/file ${isLeft ? 'sm:flex-row-reverse' : ''} ${ms.submission.fileUrl ? 'cursor-pointer' : ''}`}
-                                >
-                                  <div className="h-10 w-10 bg-white rounded-lg flex items-center justify-center text-brand-600 shrink-0 shadow-sm border border-surface-200 group-hover/file:border-brand-200 group-hover/file:bg-brand-50">
-                                    <FileText size={20} className="group-hover/file:scale-110 transition-transform" />
-                                  </div>
-                                  <div className={`flex-1 overflow-hidden ${isLeft ? 'sm:text-right' : ''}`}>
-                                    <p className="font-semibold text-surface-900 text-sm truncate">{ms.submission.fileName}</p>
-                                    <p className="text-xs text-surface-500 font-medium">{ms.submission.submittedAt}</p>
-                                  </div>
-                                  {ms.submission.fileUrl ? (
-                                    <a
-                                      href={ms.submission.fileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="h-8 w-8 rounded-lg flex items-center justify-center text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm transition-all focus:outline-none shrink-0"
-                                    >
-                                      <Download size={16} />
-                                    </a>
-                                  ) : (
-                                    <button 
-                                      className="h-8 w-8 rounded-lg flex items-center justify-center text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm transition-all focus:outline-none shrink-0" 
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Download size={16} />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenDrivePicker(ms.id);
-                                  }}
-                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl font-semibold text-xs text-surface-700 bg-white border border-surface-200 shadow-sm hover:bg-surface-50 transition-all cursor-pointer active:scale-98"
-                                >
-                                  <Upload size={14} className="text-surface-500" />
-                                  Re-submit File
-                                </button>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setTargetMilestoneId(ms.id);
-                                    setShowManualSubmitModal(true);
-                                  }}
-                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl font-semibold text-xs text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 transition-all cursor-pointer active:scale-98"
-                                >
-                                  <Link2 size={14} />
-                                  Attach Link / Doc
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-4 bg-brand-50/30 rounded-xl p-4 border border-brand-100 border-dashed">
-                              <div className={`flex flex-col items-center justify-center text-center ${isLeft ? 'sm:items-end sm:text-right' : 'sm:items-start sm:text-left'}`}>
-                                <div className="h-10 w-10 bg-white shadow-sm border border-surface-200 rounded-full flex items-center justify-center text-surface-400 mb-2">
-                                  <FileText size={18} />
-                                </div>
-                                <h4 className="text-surface-900 font-semibold text-sm mb-1">No submission yet</h4>
-                                <p className="text-surface-500 text-xs max-w-[200px]">Upload work or submit doc link for the entire group.</p>
-                              </div>
-                              <div className="flex flex-col sm:flex-row gap-2">
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenDrivePicker(ms.id);
-                                  }}
-                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl font-semibold text-xs text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 shadow-sm shadow-brand-500/20 transition-all cursor-pointer"
-                                >
-                                  <Upload size={14} />
-                                  Google Drive
-                                </button>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setTargetMilestoneId(ms.id);
-                                    setShowManualSubmitModal(true);
-                                  }}
-                                  className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl font-semibold text-xs text-brand-700 bg-white border border-brand-200 hover:bg-brand-50 shadow-sm transition-all cursor-pointer"
-                                >
-                                  <Link2 size={14} />
-                                  Attach Link / Doc
-                                </button>
-                              </div>
                             </div>
                           )}
                         </div>
@@ -418,59 +205,6 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
         </div>
       </div>
 
-      {/* Manual Submit Modal */}
-      {showManualSubmitModal && (
-        <div className="fixed inset-0 bg-surface-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-heading font-bold text-lg text-surface-900">Submit Milestone Work</h3>
-              <button 
-                onClick={() => setShowManualSubmitModal(false)}
-                className="text-surface-400 hover:text-surface-600 text-sm p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-surface-700 mb-1">Document / Submission Name</label>
-              <input 
-                type="text" 
-                value={manualFileName}
-                onChange={(e) => setManualFileName(e.target.value)}
-                placeholder="e.g. Cold_War_Perspectives_Paper.pdf"
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-surface-700 mb-1">Resource Link / URL (Optional)</label>
-              <input 
-                type="url" 
-                value={manualFileUrl}
-                onChange={(e) => setManualFileUrl(e.target.value)}
-                placeholder="https://docs.google.com/document/..."
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button 
-                onClick={() => setShowManualSubmitModal(false)}
-                className="px-4 py-2 rounded-xl text-sm font-medium text-surface-600 hover:bg-surface-100 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleManualSubmit}
-                disabled={!manualFileName.trim()}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 cursor-pointer shadow-sm shadow-brand-500/20"
-              >
-                Submit Work
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showAddEvent && (
         <AddEventModal
           projectId={projectData.id}
@@ -478,21 +212,6 @@ export default function Milestones({ classData, projectData, onBack, onNavigate,
           onClose={() => setShowAddEvent(false)}
           onCreated={handleEventCreated}
         />
-      )}
-
-      {/* Google Drive Integration Elements */}
-      {isPickerActive && creds.clientId && creds.appId && creds.developerKey && (
-        <drive-picker
-          ref={pickerNodeRef}
-          client-id={creds.clientId}
-          app-id={creds.appId}
-          developer-key={creds.developerKey}
-        >
-          <drive-picker-docs-view
-            owned-by-me="true"
-            mime-types="application/pdf,image/png,image/jpeg,application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.presentation"
-          />
-        </drive-picker>
       )}
     </div>
   );

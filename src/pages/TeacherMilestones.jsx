@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, CheckCircle2, Clock, AlertCircle, MessageSquarePlus, ArrowLeft, ChevronDown, ChevronRight, Upload, FileText, Download, Link2, Plus } from 'lucide-react';
-import { getGoogleCredentials } from '../utils/googleDriveConfig';
+import React, { useState, useEffect, useCallback } from 'react';
+import { CheckCircle2, Clock, AlertCircle, ArrowLeft, ChevronDown, Plus } from 'lucide-react';
 import AddEventModal from '../components/AddEventModal';
 import { formatChangedAt, statusChangedTitle } from '../utils/statusChangedAt';
 
@@ -10,11 +9,6 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
   
   const [milestones, setMilestones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const [creds] = useState(getGoogleCredentials());
-  const [isPickerActive, setIsPickerActive] = useState(false);
-  const [submittingMilestoneId, setSubmittingMilestoneId] = useState(null);
-  const pickerNodeRef = useRef(null);
 
   const fetchMilestones = useCallback(async () => {
     if (!projectData?.id) return;
@@ -60,65 +54,6 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
       console.error('Error updating milestone status:', err);
     }
   };
-
-  const handleOpenDrivePicker = (milestoneId) => {
-    if (!creds.clientId || !creds.appId || !creds.developerKey) {
-      alert('Google Drive integration is not configured. Please define VITE_GOOGLE_CLIENT_ID, VITE_GOOGLE_APP_ID, and VITE_GOOGLE_API_KEY in your .env file.');
-      return;
-    }
-    setSubmittingMilestoneId(milestoneId);
-    setIsPickerActive(true);
-  };
-
-  useEffect(() => {
-    if (!isPickerActive) return;
-    const node = pickerNodeRef.current;
-    if (!node) return;
-
-    const openTimer = setTimeout(() => {
-      if (node && typeof node.open === 'function') {
-        node.open();
-      }
-    }, 0);
-
-    const handlePicked = async (event) => {
-      const selectedDocs = event.detail.docs;
-      if (selectedDocs && selectedDocs.length > 0 && submittingMilestoneId) {
-        try {
-          const doc = selectedDocs[0];
-          const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/projects/${projectData.id}/milestones/${submittingMilestoneId}/submit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              fileName: doc.name,
-              fileUrl: doc.url
-            })
-          });
-          if (res.ok) {
-            await fetchMilestones();
-          }
-        } catch (err) {
-          console.error('Error submitting picked document:', err);
-        }
-      }
-      setIsPickerActive(false);
-      setSubmittingMilestoneId(null);
-    };
-
-    const handleCanceled = () => {
-      setIsPickerActive(false);
-      setSubmittingMilestoneId(null);
-    };
-
-    node.addEventListener('picker:picked', handlePicked);
-    node.addEventListener('picker:canceled', handleCanceled);
-
-    return () => {
-      clearTimeout(openTimer);
-      node.removeEventListener('picker:picked', handlePicked);
-      node.removeEventListener('picker:canceled', handleCanceled);
-    };
-  }, [isPickerActive, submittingMilestoneId, projectData?.id, fetchMilestones]);
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -210,22 +145,13 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
                     <h3 className="text-lg font-bold text-surface-900 mb-1 leading-tight">{ms.title}</h3>
                     <p className="text-surface-600 text-sm mb-4 leading-relaxed">{ms.details}</p>
                     
-                    {ms.submission && (
-                      <div className={`flex items-center gap-2 ${isLeft ? 'sm:justify-end' : ''}`}>
-                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                          <CheckCircle2 size={12} />
-                          Submitted
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Expandable Submission Area */}
+                    {/* Expandable Status Area */}
                     <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0'} pt-0`}>
                       <div className="overflow-hidden">
                         <div className={`pt-5 border-t border-surface-200/60 ${isLeft ? 'sm:text-right' : 'sm:text-left'} text-left`}>
                           
                           {/* Quick Status Toggles */}
-                          <div className="mb-4 pb-4 border-b border-surface-200/60 flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
                             <div>
                               <p className="text-xs font-bold text-surface-600 uppercase tracking-wider">Milestone Status</p>
                               <p className="text-[11px] text-surface-400">Team milestone progress</p>
@@ -266,63 +192,9 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
                             </div>
                           </div>
                           {(ms.startedAt || ms.completedAt) && (
-                            <div className="-mt-2 mb-4 text-[11px] text-surface-500 space-y-0.5">
+                            <div className="mt-2 text-[11px] text-surface-500 space-y-0.5">
                               {ms.startedAt && <p>Moved to In Progress on {formatChangedAt(ms.startedAt)}</p>}
                               {ms.completedAt && <p>Completed on {formatChangedAt(ms.completedAt)}</p>}
-                            </div>
-                          )}
-                          {ms.submission ? (
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-xs font-bold text-surface-500 uppercase tracking-wider mb-2.5 flex items-center gap-2 before:content-[''] before:w-1 before:h-3 before:bg-brand-400 before:rounded-full">
-                                  Submitted Workspace
-                                </p>
-                                <div 
-                                  onClick={(e) => {
-                                    if (ms.submission.fileUrl) {
-                                      e.stopPropagation();
-                                      window.open(ms.submission.fileUrl, '_blank', 'noopener,noreferrer');
-                                    }
-                                  }}
-                                  className={`flex items-center gap-3 p-3.5 bg-surface-50/80 rounded-xl border border-surface-200 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors group/file ${isLeft ? 'sm:flex-row-reverse' : ''} ${ms.submission.fileUrl ? 'cursor-pointer' : ''}`}
-                                >
-                                  <div className="h-10 w-10 bg-white rounded-lg flex items-center justify-center text-indigo-600 shrink-0 shadow-sm border border-surface-200 group-hover/file:border-indigo-200 group-hover/file:bg-indigo-50">
-                                    <FileText size={20} className="group-hover/file:scale-110 transition-transform" />
-                                  </div>
-                                  <div className={`flex-1 overflow-hidden ${isLeft ? 'sm:text-right' : ''}`}>
-                                    <p className="font-semibold text-surface-900 text-sm truncate">{ms.submission.fileName}</p>
-                                    <p className="text-xs text-surface-500 font-medium">{ms.submission.submittedAt}</p>
-                                  </div>
-                                  {ms.submission.fileUrl ? (
-                                    <a
-                                      href={ms.submission.fileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="h-8 w-8 rounded-lg flex items-center justify-center text-surface-400 hover:text-indigo-600 hover:bg-white shadow-sm transition-all focus:outline-none shrink-0"
-                                    >
-                                      <Download size={16} />
-                                    </a>
-                                  ) : (
-                                    <button 
-                                      className="h-8 w-8 rounded-lg flex items-center justify-center text-surface-400 hover:text-indigo-600 hover:bg-white shadow-sm transition-all focus:outline-none shrink-0" 
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Download size={16} />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-4 bg-indigo-50/30 rounded-xl p-4 border border-indigo-100 border-dashed">
-                              <div className={`flex flex-col items-center justify-center text-center ${isLeft ? 'sm:items-end sm:text-right' : 'sm:items-start sm:text-left'}`}>
-                                <div className="h-10 w-10 bg-white shadow-sm border border-surface-200 rounded-full flex items-center justify-center text-surface-400 mb-2">
-                                  <FileText size={18} />
-                                </div>
-                                <h4 className="text-surface-900 font-semibold text-sm mb-1">No submission yet</h4>
-                                <p className="text-surface-500 text-xs max-w-[200px]">Students have not submitted work for this milestone yet.</p>
-                              </div>
                             </div>
                           )}
                         </div>
@@ -343,21 +215,6 @@ export default function TeacherMilestones({ classData, projectData, onBack, onNa
           onClose={() => setShowAddEvent(false)}
           onCreated={handleEventCreated}
         />
-      )}
-
-      {/* Google Drive Integration Elements */}
-      {isPickerActive && creds.clientId && creds.appId && creds.developerKey && (
-        <drive-picker
-          ref={pickerNodeRef}
-          client-id={creds.clientId}
-          app-id={creds.appId}
-          developer-key={creds.developerKey}
-        >
-          <drive-picker-docs-view
-            owned-by-me="true"
-            mime-types="application/pdf,image/png,image/jpeg,application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.presentation"
-          />
-        </drive-picker>
       )}
     </div>
   );

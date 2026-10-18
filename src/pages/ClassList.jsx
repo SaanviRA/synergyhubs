@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Book, Users, ArrowRight, Trash2 } from 'lucide-react';
-import { classProgress } from '../utils/classProgress';
 
 export default function ClassList({ onSelectClass }) {
   // null | 'join' | 'create'
@@ -147,7 +146,7 @@ export default function ClassList({ onSelectClass }) {
             
             {/* Bottom details area */}
             <div className="p-5 space-y-4 relative">
-              <div className="flex justify-between items-center text-sm font-medium">
+              <div className="flex justify-between items-center text-sm font-medium pr-8">
                 {cls.shared ? (
                  <span className="text-surface-600">Projects you were invited to</span>
                 ) : (
@@ -165,24 +164,6 @@ export default function ClassList({ onSelectClass }) {
                 </div>
                  </>
                 )}
-              </div>
-              
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-sm font-medium pb-1">
-                  <span className="text-surface-600">
-                    Overall Progress
-                    <span className="text-surface-400 font-normal">
-                      {' '}· {cls.projects.length} {cls.projects.length === 1 ? 'project' : 'projects'}
-                    </span>
-                  </span>
-                  <span className="text-brand-600">{classProgress(cls.projects)}%</span>
-                </div>
-                <div className="w-full h-2 bg-surface-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full bg-gradient-to-r ${cls.color} rounded-full transition-all duration-1000 ease-out`}
-                    style={{ width: `${classProgress(cls.projects)}%` }}
-                  />
-                </div>
               </div>
               
                <div className="absolute bottom-5 right-5 text-brand-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
