@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS workspace_messages CASCADE;
 DROP TABLE IF EXISTS workspaces CASCADE;
 DROP TABLE IF EXISTS resources CASCADE;
 DROP TABLE IF EXISTS milestones CASCADE;
+DROP TABLE IF EXISTS project_deletions CASCADE;
 DROP TABLE IF EXISTS project_removals CASCADE;
 DROP TABLE IF EXISTS project_members CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
@@ -99,6 +100,14 @@ CREATE TABLE project_members (
 -- 5b. Members removed from a project's team. Visiting the project does not put them back;
 --     inviting them again does.
 CREATE TABLE project_removals (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (project_id, user_id)
+);
+
+-- 5c. Projects a student deleted. Deleting only hides the project from that student; it is
+--     erased once nobody has it any more. Rejoining its class or being invited again brings it back.
+CREATE TABLE project_deletions (
     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     PRIMARY KEY (project_id, user_id)

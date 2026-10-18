@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Clock, CalendarHeart, LibraryBig, ArrowRight, Plus, Trash2 } from 'lucide-react';
 import MoveSharedProject from '../components/MoveSharedProject';
+import DeleteProject from '../components/DeleteProject';
 
 export default function TeacherProjectList({ classData, onSelectProject, onBack, onUpdateClass, isStudentOwner = false }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -146,7 +147,13 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
     </button>
   );
 
-  // Projects shared with this student get a control to file them under another class
+  const dropProject = (dropped) => onUpdateClass({
+    ...classData,
+    projects: projects.filter(p => p.id !== dropped.id)
+  });
+
+  // Projects shared with this student get a control to file them under another class, and
+  // a student owner can delete projects
   const renderProject = (project) => (
     <div key={project.id} className="space-y-2">
       <ProjectCard project={project} />
@@ -154,12 +161,10 @@ export default function TeacherProjectList({ classData, onSelectProject, onBack,
         <MoveSharedProject
           project={project}
           currentClassId={classData.id}
-          onMoved={(moved) => onUpdateClass({
-            ...classData,
-            projects: projects.filter(p => p.id !== moved.id)
-          })}
+          onMoved={dropProject}
         />
       )}
+      {isStudentOwner && <DeleteProject project={project} onDeleted={dropProject} />}
     </div>
   );
 

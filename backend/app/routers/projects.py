@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..access import Conn, ProjectAccess, User, is_teacher
+from ..deletion import delete_project_for
 from ..errors import SafeRoute, fails_with
 from ..progress import recalculate_project_progress
 from ..utils import iso_z
@@ -28,6 +29,16 @@ async def get_project(projectId: int, conn: Conn):
         "color": project["color"],
         "hue": project["hue"],
     }
+
+
+# Delete the project for the calling student. Anyone else who has it keeps it; it is erased once
+# nobody does.
+@router.delete("", dependencies=[fails_with("Server error deleting project"), ProjectAccess])
+async def delete_project(projectId: int, conn: Conn, user: User):
+    if await is_teacher(conn, user.id):
+        raise HTTPException(status_code=403, detail="Only students can delete projects")
+    await delete_project_for(conn, projectId, user.id)
+    return {"success": True}
 
 
 # Record student project visit / click. A visit adds a class member to the team, unless they

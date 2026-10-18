@@ -96,9 +96,10 @@ async def invite_teammate(projectId: int, body: InviteBody, conn: Conn):
             [],
             "Just joined the project!",
         )
-        await conn.execute(
-            "DELETE FROM project_removals WHERE project_id = $1 AND user_id = $2", projectId, invited["id"]
-        )
+        for table in ("project_removals", "project_deletions"):
+            await conn.execute(
+                f"DELETE FROM {table} WHERE project_id = $1 AND user_id = $2", projectId, invited["id"]
+            )
 
     return {
         "success": True,

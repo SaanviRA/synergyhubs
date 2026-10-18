@@ -3,7 +3,8 @@ from datetime import date as Date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..access import Conn, User
+from ..access import Conn, User, is_teacher
+from ..deletion import delete_class_for
 from ..errors import SafeRoute, fails_with
 from ..utils import due_label, generate_join_code, random_class_color
 
@@ -58,7 +59,11 @@ async def list_classes(conn: Conn, user: User):
     )
     class_ids = [cls["id"] for cls in classes]
     projects = await conn.fetch(
-        "SELECT * FROM projects WHERE class_id = ANY($1::int[]) ORDER BY id ASC", class_ids
+        """SELECT * FROM projects p WHERE class_id = ANY($1::int[])
+           AND NOT EXISTS (SELECT 1 FROM project_deletions d WHERE d.project_id = p.id AND d.user_id = $2)
+           ORDER BY id ASC""",
+        class_ids,
+        user.id,
     )
     members = await conn.fetch(
         """SELECT class_id, COUNT(*) AS member_count FROM class_members
@@ -127,6 +132,13 @@ async def join_class(body: JoinBody, conn: Conn, user: User):
                 cls["id"],
                 user.id,
             )
+            # Rejoining brings back the class's projects the student deleted when they left
+            await conn.execute(
+                """DELETE FROM project_deletions d USING projects p
+                   WHERE d.project_id = p.id AND p.class_id = $1 AND d.user_id = $2""",
+                cls["id"],
+                user.id,
+            )
             # Also automatically assign them to a default project if one exists in this class
             project_id = await conn.fetchval(
                 "SELECT id FROM projects WHERE class_id = $1 ORDER BY id ASC LIMIT 1", cls["id"]
@@ -177,6 +189,21 @@ async def create_class(body: ClassBody, conn: Conn, user: User):
         "success": True,
         "class": {"id": new_class["id"], "name": new_class["name"], "joinCode": new_class["join_code"]},
     }
+
+
+# Delete a class for the calling student: they leave it and its projects are deleted for them.
+# Classmates and anyone the projects are shared with keep them.
+@router.delete("/{classId}", dependencies=[fails_with("Server error deleting class")])
+async def delete_class(classId: int, conn: Conn, user: User):
+    if await is_teacher(conn, user.id):
+        raise HTTPException(status_code=403, detail="Only students can delete classes")
+    if not await conn.fetchval(
+        "SELECT 1 FROM class_members WHERE class_id = $1 AND user_id = $2", classId, user.id
+    ):
+        raise HTTPException(status_code=403, detail="You are not a member of this class")
+
+    await delete_class_for(conn, classId, user.id)
+    return {"success": True}
 
 
 # Create a new project under a class (class owner only)

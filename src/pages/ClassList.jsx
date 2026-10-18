@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Book, Users, ArrowRight } from 'lucide-react';
+import { Plus, Book, Users, ArrowRight, Trash2 } from 'lucide-react';
 import { classProgress } from '../utils/classProgress';
 
 export default function ClassList({ onSelectClass }) {
@@ -73,6 +73,24 @@ export default function ClassList({ onSelectClass }) {
     }
   };
 
+  // Leaves the class and deletes its projects for this student only; classmates and anyone the
+  // projects are shared with keep them
+  const handleDeleteClass = async (cls) => {
+    if (!window.confirm(`Delete "${cls.name}" and its projects? They are removed for you only; anyone else in them keeps them.`)) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/classes/${cls.id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to delete class');
+      }
+      await fetchClasses();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleCloseModal = () => {
     setModalMode(null);
     setJoinCode('');
@@ -112,10 +130,10 @@ export default function ClassList({ onSelectClass }) {
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {classes.map((cls) => (
-          <button 
-            key={cls.id}
+          <div key={cls.id} className="relative">
+          <button
             onClick={() => onSelectClass(cls)}
-            className="group relative text-left overflow-hidden bg-white rounded-3xl border border-surface-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-brand-300 transition-all duration-300"
+            className="group relative w-full h-full text-left overflow-hidden bg-white rounded-3xl border border-surface-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-brand-300 transition-all duration-300"
           >
             {/* Top color banner */}
             <div className={`h-24 sm:h-32 w-full bg-gradient-to-br ${cls.color} p-5 flex flex-col justify-end text-white relative`}>
@@ -172,6 +190,16 @@ export default function ClassList({ onSelectClass }) {
               </div>
             </div>
           </button>
+          {!cls.shared && (
+            <button
+              onClick={() => handleDeleteClass(cls)}
+              title="Delete Class"
+              className="absolute top-3 right-3 z-20 p-2 rounded-xl bg-black/20 text-white hover:bg-red-600 transition-colors"
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
+          </div>
         ))}
       </div>
 

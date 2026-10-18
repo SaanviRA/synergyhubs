@@ -157,6 +157,14 @@ ALTER TABLE milestones ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME
 ALTER TABLE users ADD COLUMN IF NOT EXISTS school VARCHAR(150);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS academic_year VARCHAR(20);
 
+-- 2g. Projects a student deleted. Deleting only hides the project from that student; it is
+--     erased once nobody has it any more. Rejoining its class or being invited again brings it back.
+CREATE TABLE IF NOT EXISTS project_deletions (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (project_id, user_id)
+);
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

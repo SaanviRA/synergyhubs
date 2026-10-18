@@ -32,12 +32,14 @@ User = Annotated[CurrentUser, Depends(active_user)]
 
 
 async def ensure_project_access(conn: asyncpg.Connection, project_id: int, user_id: int) -> None:
-    """Allows members of the project and members of the class the project belongs to."""
+    """Allows members of the project and members of the class the project belongs to, unless
+    they deleted the project."""
     class_id = await conn.fetchval("SELECT class_id FROM projects WHERE id = $1", project_id)
     if class_id is None:
         raise HTTPException(status_code=404, detail="Project not found")
     allowed = await conn.fetchval(
-        """SELECT EXISTS (SELECT 1 FROM class_members WHERE class_id = $1 AND user_id = $3)
+        """SELECT (EXISTS (SELECT 1 FROM class_members WHERE class_id = $1 AND user_id = $3)
+                   AND NOT EXISTS (SELECT 1 FROM project_deletions WHERE project_id = $2 AND user_id = $3))
                OR EXISTS (SELECT 1 FROM project_members WHERE project_id = $2 AND user_id = $3)""",
         class_id,
         project_id,
