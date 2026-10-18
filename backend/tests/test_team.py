@@ -59,19 +59,15 @@ async def test_add_and_remove_roles(client, conn):
     assert (res.status_code, res.json()) == (400, {"error": "userId and role are required"})
 
 
-async def test_status_update_is_public_and_logged(client, conn):
+async def test_status_update_is_public_and_not_logged(client, conn):
+    logs_before = await conn.fetchval("SELECT COUNT(*) FROM evaluation_logs")
     res = await client.post(f"{BASE}/team/update", json={"text": "Slides are done"}, headers=auth(ALEX))
     assert res.json() == {"success": True}
 
     team = (await client.get(f"{BASE}/team", headers=auth(SARAH))).json()
     assert team[0]["activeLog"] == "Slides are done"
-    log = await conn.fetchrow("SELECT * FROM evaluation_logs ORDER BY id DESC LIMIT 1")
-    assert (log["user_id"], log["log_text"], log["date"], log["log_type"]) == (
-        1,
-        "Slides are done",
-        short_date(),
-        "status_update",
-    )
+    # Updates and the evaluation log are separate
+    assert await conn.fetchval("SELECT COUNT(*) FROM evaluation_logs") == logs_before
 
     res = await client.post(f"{BASE}/team/update", json={"text": " "}, headers=auth(ALEX))
     assert (res.status_code, res.json()) == (400, {"error": "Text is required"})
@@ -83,23 +79,26 @@ async def test_work_log_lifecycle(client):
     assert new_log == {"id": new_log["id"], "text": "Read chapter 4", "date": short_date()}
 
     logs = (await client.get(f"{BASE}/logs", headers=auth(ALEX))).json()
-    assert [log["id"] for log in logs] == [new_log["id"], 4, 3]
+    # Alex's seeded status update (log 4) is not part of the evaluation log
+    assert [log["id"] for log in logs] == [new_log["id"], 3]
     assert set(logs[0]) == {"id", "text", "date", "created_at", "type"}
     assert logs[0]["type"] == "work_log" and logs[0]["created_at"].endswith("Z")
-    assert (await client.get(f"{BASE}/team", headers=auth(ALEX))).json()[0]["activeLog"] == "Read chapter 4"
+    # Logging work does not post a status update
+    team = (await client.get(f"{BASE}/team", headers=auth(ALEX))).json()
+    assert team[0]["activeLog"] == "Found 3 primary sources on JFK."
 
     # Another student cannot delete it; the owner can
     await client.delete(f"{BASE}/logs/{new_log['id']}", headers=auth(SARAH))
-    assert len((await client.get(f"{BASE}/logs", headers=auth(ALEX))).json()) == 3
+    assert len((await client.get(f"{BASE}/logs", headers=auth(ALEX))).json()) == 2
     assert (await client.delete(f"{BASE}/logs/{new_log['id']}", headers=auth(ALEX))).json() == {
         "success": True
     }
-    assert [log["id"] for log in (await client.get(f"{BASE}/logs", headers=auth(ALEX))).json()] == [4, 3]
+    assert [log["id"] for log in (await client.get(f"{BASE}/logs", headers=auth(ALEX))).json()] == [3]
 
 
 async def test_students_only_see_their_own_logs(client):
     own = await client.get(f"{BASE}/logs", params={"userId": ALEX["id"]}, headers=auth(ALEX))
-    assert [log["id"] for log in own.json()] == [4, 3]
+    assert [log["id"] for log in own.json()] == [3]
 
     res = await client.get(f"{BASE}/logs", params={"userId": SARAH["id"]}, headers=auth(ALEX))
     assert (res.status_code, res.json()) == (403, {"error": "You can only view your own logs"})
@@ -107,12 +106,12 @@ async def test_students_only_see_their_own_logs(client):
 
 async def test_teacher_sees_all_logs_or_one_students(client):
     logs = (await client.get(f"{BASE}/logs", headers=auth(MR_DAVIS))).json()
-    assert [log["id"] for log in logs] == [6, 5, 4, 3, 2, 1]
+    assert [log["id"] for log in logs] == [5, 3, 2, 1]
     assert set(logs[0]) == {"id", "text", "date", "created_at", "userId", "type", "userName", "avatar"}
     assert (logs[0]["userId"], logs[0]["userName"], logs[0]["avatar"]) == (2, "Sarah K.", "SK")
 
     one = await client.get(f"{BASE}/logs", params={"userId": SARAH["id"]}, headers=auth(MR_DAVIS))
-    assert [log["id"] for log in one.json()] == [6, 5]
+    assert [log["id"] for log in one.json()] == [5]
 
 
 async def test_invited_student_sees_the_project_under_shared_and_can_move_it(client, outsider):

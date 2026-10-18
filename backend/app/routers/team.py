@@ -171,7 +171,7 @@ async def remove_role(projectId: int, body: RoleBody, conn: Conn):
     return {"success": True}
 
 
-# Post a status update (visible to everyone)
+# Post a status update (visible to everyone). It is not added to the evaluation log.
 @router.post("/team/update", dependencies=[fails_with("Server error posting status update"), ProjectAccess])
 async def post_status_update(projectId: int, body: TextBody, conn: Conn, user: User):
     text = _require_text(body)
@@ -181,15 +181,12 @@ async def post_status_update(projectId: int, body: TextBody, conn: Conn, user: U
         projectId,
         user.id,
     )
-    await conn.execute(
-        """INSERT INTO evaluation_logs (project_id, user_id, log_text, date, log_type)
-           VALUES ($1, $2, $3, $4, 'status_update')""",
-        projectId,
-        user.id,
-        text,
-        short_date(),
-    )
     return {"success": True}
+
+
+# Status updates posted before updates and the evaluation log were separated were also stored as
+# 'status_update' logs. They stay in the database but are not part of the evaluation log.
+EVALUATION_LOG = "COALESCE(log_type, 'work_log') <> 'status_update'"
 
 
 # Fetch logs (private user logs for students, or all student logs if teacher)
@@ -199,11 +196,11 @@ async def get_logs(projectId: int, conn: Conn, user: User, userId: int | None = 
 
     if teacher and userId is None:
         rows = await conn.fetch(
-            """SELECT el.id, el.log_text AS text, el.date, el.created_at, el.user_id AS "userId",
+            f"""SELECT el.id, el.log_text AS text, el.date, el.created_at, el.user_id AS "userId",
                       COALESCE(el.log_type, 'work_log') AS type, u.name AS "userName", u.avatar
                FROM evaluation_logs el
                JOIN users u ON el.user_id = u.id
-               WHERE el.project_id = $1
+               WHERE el.project_id = $1 AND {EVALUATION_LOG}
                ORDER BY el.id DESC""",
             projectId,
         )
@@ -212,9 +209,9 @@ async def get_logs(projectId: int, conn: Conn, user: User, userId: int | None = 
         if userId is not None and userId != user.id and not teacher:
             raise HTTPException(status_code=403, detail="You can only view your own logs")
         rows = await conn.fetch(
-            """SELECT id, log_text AS text, date, created_at, COALESCE(log_type, 'work_log') AS type
+            f"""SELECT id, log_text AS text, date, created_at, COALESCE(log_type, 'work_log') AS type
                FROM evaluation_logs
-               WHERE project_id = $1 AND user_id = $2
+               WHERE project_id = $1 AND user_id = $2 AND {EVALUATION_LOG}
                ORDER BY id DESC""",
             projectId,
             userId if userId is not None else user.id,
@@ -223,7 +220,7 @@ async def get_logs(projectId: int, conn: Conn, user: User, userId: int | None = 
     return [{**dict(row), "created_at": iso_z(row["created_at"])} for row in rows]
 
 
-# Add a private work log
+# Add a private work log. It does not change the member's public status update.
 @router.post("/logs", dependencies=[fails_with("Server error saving log"), ProjectAccess])
 async def add_log(projectId: int, body: TextBody, conn: Conn, user: User):
     text = _require_text(body)
@@ -235,13 +232,6 @@ async def add_log(projectId: int, body: TextBody, conn: Conn, user: User):
         user.id,
         text,
         short_date(),
-    )
-    # Also update public active log
-    await conn.execute(
-        "UPDATE project_members SET active_log = $1 WHERE project_id = $2 AND user_id = $3",
-        text,
-        projectId,
-        user.id,
     )
     return dict(new_log)
 
