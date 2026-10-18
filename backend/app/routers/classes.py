@@ -58,10 +58,20 @@ async def list_classes(conn: Conn, user: User):
         user.id,
     )
     class_ids = [cls["id"] for cls in classes]
+    # The projects of the caller's classes they have not deleted, and projects they were invited to
+    # individually ("shared"). Each shows under its own class, or "Shared", unless the caller
+    # filed it under another of their classes.
     projects = await conn.fetch(
-        """SELECT * FROM projects p WHERE class_id = ANY($1::int[])
-           AND NOT EXISTS (SELECT 1 FROM project_deletions d WHERE d.project_id = p.id AND d.user_id = $2)
-           ORDER BY id ASC""",
+        """SELECT p.*, pl.class_id AS placed_class_id, NOT (p.class_id = ANY($1::int[])) AS shared
+           FROM projects p
+           LEFT JOIN project_placements pl ON pl.project_id = p.id AND pl.user_id = $2
+           WHERE CASE WHEN p.class_id = ANY($1::int[])
+                      THEN NOT EXISTS (SELECT 1 FROM project_deletions d
+                                       WHERE d.project_id = p.id AND d.user_id = $2)
+                      ELSE EXISTS (SELECT 1 FROM project_members pm
+                                   WHERE pm.project_id = p.id AND pm.user_id = $2)
+                 END
+           ORDER BY p.id ASC""",
         class_ids,
         user.id,
     )
@@ -72,25 +82,16 @@ async def list_classes(conn: Conn, user: User):
     )
     member_counts = {row["class_id"]: row["member_count"] for row in members}
 
-    # Projects the caller was invited to individually. They sit in "Shared" until the caller
-    # files them under one of their own classes.
-    shared = await conn.fetch(
-        """SELECT p.*, pm.placed_class_id FROM projects p
-           JOIN project_members pm ON pm.project_id = p.id
-           WHERE pm.user_id = $1 AND NOT (p.class_id = ANY($2::int[]))
-           ORDER BY p.id ASC""",
-        user.id,
-        class_ids,
-    )
-
     projects_by_class: dict[int | None, list[dict]] = {}
     for p in projects:
-        projects_by_class.setdefault(p["class_id"], []).append({key: p[key] for key in PROJECT_FIELDS})
-    for p in shared:
-        placed = p["placed_class_id"] if p["placed_class_id"] in class_ids else None
-        projects_by_class.setdefault(placed, []).append(
-            {**{key: p[key] for key in PROJECT_FIELDS}, "shared": True}
-        )
+        if p["placed_class_id"] in class_ids:
+            shown_in = p["placed_class_id"]
+        else:
+            shown_in = None if p["shared"] else p["class_id"]
+        card = {key: p[key] for key in PROJECT_FIELDS}
+        if p["shared"]:
+            card["shared"] = True
+        projects_by_class.setdefault(shown_in, []).append(card)
 
     result = [
         {

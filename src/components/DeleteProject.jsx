@@ -25,15 +25,13 @@ export default function DeleteProject({ project, onDeleted }) {
   };
 
   return (
-    <div className="flex justify-end px-2 text-sm">
-      <button
-        onClick={handleDelete}
-        disabled={isDeleting}
-        className="flex items-center gap-1.5 text-surface-400 hover:text-red-600 font-medium transition-colors disabled:opacity-50"
-      >
-        <Trash2 size={16} />
-        {isDeleting ? 'Deleting...' : 'Delete project'}
-      </button>
-    </div>
+    <button
+      onClick={handleDelete}
+      disabled={isDeleting}
+      className="ml-auto flex items-center gap-1.5 text-surface-400 hover:text-red-600 font-medium transition-colors disabled:opacity-50"
+    >
+      <Trash2 size={16} />
+      {isDeleting ? 'Deleting...' : 'Delete project'}
+    </button>
   );
 }

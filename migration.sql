@@ -106,10 +106,29 @@ END $$;
 ALTER TABLE project_members
     ADD COLUMN IF NOT EXISTS last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
--- 2b. Let a member who was invited to a single project (and is not in its class) file it
---     under one of their own classes. NULL keeps it in their "Shared" class.
-ALTER TABLE project_members
-    ADD COLUMN IF NOT EXISTS placed_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;
+-- 2b. Let a user file any project under one of their own classes. Only changes where that user
+--     sees it. This used to be project_members.placed_class_id, for shared projects only; any
+--     placements made there are carried over once and the column is dropped.
+CREATE TABLE IF NOT EXISTS project_placements (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE NOT NULL,
+    PRIMARY KEY (project_id, user_id)
+);
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'project_members' AND column_name = 'placed_class_id'
+    ) THEN
+        EXECUTE 'INSERT INTO project_placements (project_id, user_id, class_id)
+                 SELECT project_id, user_id, placed_class_id FROM project_members
+                 WHERE placed_class_id IS NOT NULL
+                 ON CONFLICT DO NOTHING';
+        ALTER TABLE project_members DROP COLUMN placed_class_id;
+    END IF;
+END $$;
 
 -- 2c. Members removed from a project's team. Visiting the project does not put them back;
 --     inviting them again does.

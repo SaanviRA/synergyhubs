@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, Clock, CalendarHeart, LibraryBig, ArrowRight } from 'lucide-react';
-import MoveSharedProject from '../components/MoveSharedProject';
+import MoveProject from '../components/MoveProject';
 import DeleteProject from '../components/DeleteProject';
 
 export default function ProjectList({ classData, onSelectProject, onBack, onUpdateClass }) {
@@ -54,18 +54,14 @@ export default function ProjectList({ classData, onSelectProject, onBack, onUpda
     projects: projects.filter(p => p.id !== dropped.id)
   });
 
-  // Projects shared with this student get a control to file them under another class
+  // Each project gets controls to file it under another class and to delete it
   const renderProject = (project) => (
     <div key={project.id} className="space-y-2">
       <ProjectCard project={project} />
-      {project.shared && (
-        <MoveSharedProject
-          project={project}
-          currentClassId={classData.id}
-          onMoved={dropProject}
-        />
-      )}
-      <DeleteProject project={project} onDeleted={dropProject} />
+      <div className="flex items-center gap-3 px-2 text-sm">
+        <MoveProject project={project} currentClassId={classData.id} onMoved={dropProject} />
+        <DeleteProject project={project} onDeleted={dropProject} />
+      </div>
     </div>
   );
 

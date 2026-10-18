@@ -171,16 +171,39 @@ async def test_invited_student_sees_the_project_under_shared_and_can_move_it(cli
     assert [c["id"] for c in (await client.get("/api/classes", headers=outsider)).json()] == [own["id"], "shared"]
 
 
-async def test_move_shared_project_rules(client, outsider):
+async def test_move_project_rules(client, outsider):
     await client.post(f"{BASE}/team/invite", json={"email": "olive@example.com"}, headers=auth(ALEX))
 
     res = await client.put(f"{BASE}/class", json={"classId": 2}, headers=outsider)
     assert (res.status_code, res.json()) == (403, {"error": "You are not a member of that class"})
-
-    # Members of the project's own class cannot re-file it
-    res = await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(ALEX))
-    assert (res.status_code, res.json()) == (400, {"error": "Only projects shared with you can be moved"})
     assert (await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(MRS_SMITH))).status_code == 403
+
+
+async def test_class_members_can_move_a_class_project_for_themselves(client, conn):
+    def layout(classes):
+        return {c["id"]: [(p["id"], p.get("shared", False)) for p in c["projects"]] for c in classes}
+
+    res = await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(ALEX))
+    assert (res.status_code, res.json()) == (200, {"success": True, "classId": 2})
+    assert layout((await client.get("/api/classes", headers=auth(ALEX))).json()) == {
+        1: [(102, False), (103, False)],
+        2: [(101, False), (201, False), (202, False)],
+    }
+    # Classmates still see it in class 1, and it is still class 1's project
+    assert layout((await client.get("/api/classes", headers=auth(SARAH))).json())[1] == [
+        (101, False),
+        (102, False),
+        (103, False),
+    ]
+    assert (await client.get(f"/api/projects/{PROJECT}", headers=auth(ALEX))).json()["classId"] == 1
+
+    # Moving it to its own class (or null) puts it back
+    for back in (1, None):
+        await client.put(f"{BASE}/class", json={"classId": 2}, headers=auth(ALEX))
+        res = await client.put(f"{BASE}/class", json={"classId": back}, headers=auth(ALEX))
+        assert res.json() == {"success": True, "classId": back}
+        assert layout((await client.get("/api/classes", headers=auth(ALEX))).json())[1][0] == (101, False)
+        assert not await conn.fetchval("SELECT 1 FROM project_placements WHERE user_id = $1", ALEX["id"])
 
 
 async def test_members_can_remove_teammates_but_not_the_owner(client, conn):

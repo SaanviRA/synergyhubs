@@ -3,9 +3,9 @@ import { FolderInput } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
-// Shown under a project that was shared with the student: lets them file it under one of
-// their own classes (or send it back to "Shared"). Only changes where they see it.
-export default function MoveSharedProject({ project, currentClassId, onMoved }) {
+// Shown under a project card: lets the user file it under another of their classes (a project
+// shared with them can also go back to "Shared"). Only changes where they see it.
+export default function MoveProject({ project, currentClassId, onMoved }) {
   const [classes, setClasses] = useState([]);
   const [isMoving, setIsMoving] = useState(false);
 
@@ -16,7 +16,7 @@ export default function MoveSharedProject({ project, currentClassId, onMoved }) 
       .catch(err => console.error('Error fetching classes:', err));
   }, [currentClassId]);
 
-  const inShared = currentClassId === 'shared';
+  const canGoToShared = project.shared && currentClassId !== 'shared';
 
   const handleMove = async (value) => {
     const classId = value === 'shared' ? null : Number(value);
@@ -39,9 +39,9 @@ export default function MoveSharedProject({ project, currentClassId, onMoved }) 
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 px-2 text-sm">
-      <span className="text-surface-500 font-medium">Shared with you</span>
-      {(classes.length > 0 || !inShared) && (
+    <div className="flex items-center gap-3">
+      {project.shared && <span className="text-surface-500 font-medium">Shared with you</span>}
+      {(classes.length > 0 || canGoToShared) && (
         <label className="flex items-center gap-1.5 text-brand-600 font-medium">
           <FolderInput size={16} />
           <select
@@ -54,7 +54,7 @@ export default function MoveSharedProject({ project, currentClassId, onMoved }) 
             {classes.map(cls => (
               <option key={cls.id} value={cls.id}>{cls.name}</option>
             ))}
-            {!inShared && <option value="shared">Shared</option>}
+            {canGoToShared && <option value="shared">Shared</option>}
           </select>
         </label>
       )}

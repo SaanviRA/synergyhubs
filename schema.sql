@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS workspaces CASCADE;
 DROP TABLE IF EXISTS resources CASCADE;
 DROP TABLE IF EXISTS milestones CASCADE;
 DROP TABLE IF EXISTS project_deletions CASCADE;
+DROP TABLE IF EXISTS project_placements CASCADE;
 DROP TABLE IF EXISTS project_removals CASCADE;
 DROP TABLE IF EXISTS project_members CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
@@ -92,8 +93,15 @@ CREATE TABLE project_members (
     has_visited BOOLEAN DEFAULT FALSE,
     last_visited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     visit_count INTEGER DEFAULT 0,
-    -- Where a member who is not in the project's class files it ("Shared" when NULL)
-    placed_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
+    PRIMARY KEY (project_id, user_id)
+);
+
+-- 5a. Where a user files a project, when not where it would normally show: its own class, or
+--     "Shared" for a project shared with them. Only changes where that user sees it.
+CREATE TABLE project_placements (
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (project_id, user_id)
 );
 

@@ -17,9 +17,10 @@ PROJECT_IN_USE = """EXISTS (SELECT 1 FROM project_members WHERE project_id = $1)
 
 async def delete_project_for(conn: asyncpg.Connection, project_id: int, user_id: int) -> None:
     async with conn.transaction():
-        await conn.execute(
-            "DELETE FROM project_members WHERE project_id = $1 AND user_id = $2", project_id, user_id
-        )
+        for table in ("project_members", "project_placements"):
+            await conn.execute(
+                f"DELETE FROM {table} WHERE project_id = $1 AND user_id = $2", project_id, user_id
+            )
         await conn.execute(
             "INSERT INTO project_deletions (project_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             project_id,
@@ -34,7 +35,7 @@ async def delete_project_for(conn: asyncpg.Connection, project_id: int, user_id:
 
 async def delete_class_for(conn: asyncpg.Connection, class_id: int, user_id: int) -> None:
     """Leaves the class and deletes every project the student sees in it: the class's own
-    projects and any shared projects they filed under it."""
+    projects and any other projects they filed under it."""
     async with conn.transaction():
         await conn.execute(
             "DELETE FROM class_members WHERE class_id = $1 AND user_id = $2", class_id, user_id
@@ -42,7 +43,7 @@ async def delete_class_for(conn: asyncpg.Connection, class_id: int, user_id: int
         project_ids = await conn.fetch(
             """SELECT id FROM projects WHERE class_id = $1
                UNION
-               SELECT project_id FROM project_members WHERE user_id = $2 AND placed_class_id = $1""",
+               SELECT project_id FROM project_placements WHERE user_id = $2 AND class_id = $1""",
             class_id,
             user_id,
         )

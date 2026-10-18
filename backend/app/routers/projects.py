@@ -58,30 +58,29 @@ async def record_visit(projectId: int, conn: Conn, user: User):
     return {"success": True}
 
 
-# File a project that was shared with the caller under one of their classes (null: back to "Shared").
-# This only changes where the caller sees it; the project stays in its own class for everyone else.
+# File a project under another of the caller's classes (null: back to its own class, or "Shared" for
+# a project shared with them). This only changes where the caller sees it; the project stays in its
+# own class for everyone else.
 @router.put("/class", dependencies=[fails_with("Server error moving project"), ProjectAccess])
-async def move_shared_project(projectId: int, body: MoveBody, conn: Conn, user: User):
-    in_project_class = await conn.fetchval(
-        """SELECT EXISTS (SELECT 1 FROM projects p
-                          JOIN class_members cm ON cm.class_id = p.class_id
-                          WHERE p.id = $1 AND cm.user_id = $2)""",
-        projectId,
-        user.id,
-    )
-    if in_project_class:
-        raise HTTPException(status_code=400, detail="Only projects shared with you can be moved")
+async def move_project(projectId: int, body: MoveBody, conn: Conn, user: User):
+    own_class_id = await conn.fetchval("SELECT class_id FROM projects WHERE id = $1", projectId)
+    if body.classId is None or body.classId == own_class_id:
+        await conn.execute(
+            "DELETE FROM project_placements WHERE project_id = $1 AND user_id = $2", projectId, user.id
+        )
+        return {"success": True, "classId": body.classId}
 
-    if body.classId is not None and not await conn.fetchval(
+    if not await conn.fetchval(
         "SELECT 1 FROM class_members WHERE class_id = $1 AND user_id = $2", body.classId, user.id
     ):
         raise HTTPException(status_code=403, detail="You are not a member of that class")
 
     await conn.execute(
-        "UPDATE project_members SET placed_class_id = $1 WHERE project_id = $2 AND user_id = $3",
-        body.classId,
+        """INSERT INTO project_placements (project_id, user_id, class_id) VALUES ($1, $2, $3)
+           ON CONFLICT (project_id, user_id) DO UPDATE SET class_id = EXCLUDED.class_id""",
         projectId,
         user.id,
+        body.classId,
     )
     return {"success": True, "classId": body.classId}
 
