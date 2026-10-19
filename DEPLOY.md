@@ -154,6 +154,7 @@ curl http://127.0.0.1:5001/api/health       # {"status":"ok"}
 | `GOOGLE_CLIENT_ID` | Must equal the `VITE_GOOGLE_CLIENT_ID` the bundle was built with. Google sign-in is refused when empty. |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
 | `CORS_ORIGINS` | Leave empty when Nginx serves the frontend and `/api` from the same domain (the setup in this guide). |
+| `MODERATION_MODEL_DIR` | Folder with the school-guard model for the chat safety check (see [Chat safety check](#chat-safety-check)). When empty, chat is checked with the self-harm rules only. |
 
 ---
 
@@ -281,6 +282,44 @@ UPDATE users SET is_admin = TRUE, approved = TRUE WHERE id = <id>;
 
 Admin status is only granted this way, never by email, so signing up with an admin's address does not
 make someone an admin. Admin accounts cannot be deleted from the Manage Users page.
+
+---
+
+## Chat safety check
+
+Every workspace chat message goes through the school-guard classifier (`backend/app/moderation`)
+before it is saved:
+
+| Verdict | What happens |
+|---|---|
+| allow | Posted. |
+| review | The writer is asked to think again. If they send it anyway, it is posted and flagged. |
+| block | Held: only the writer sees it until it is reviewed. |
+| escalate | The writer may be at risk of self-harm. Held, the writer is shown where to get help, and every admin's Discord webhook gets an urgent alert (without the student's name or the message). |
+
+Flags are reviewed under **Flagged Messages** on the teacher's class list by the teachers of the class.
+For classes with no teacher account (such as one a student created), admins review them from
+**Account > Manage Users**. Reviewed flags, and messages a reviewer removed, are deleted after 180 days.
+
+The model is not part of the bundle (it is about 125 MB and rarely changes). Copy it to the server
+once, and again after retraining:
+
+```bash
+rsync -av ~/school-guard/model/ user@server:/tmp/moderation-model/
+ssh user@server "sudo rsync -a --delete /tmp/moderation-model/ /opt/group_app/moderation-model/ \
+  && sudo chmod -R a+rX /opt/group_app/moderation-model"
+```
+
+Then set `MODERATION_MODEL_DIR=/opt/group_app/moderation-model` in `/etc/group_app/group_app.env` and
+restart the API. The log shows `Moderation model school-guard-... loaded` on success. If the model
+cannot be loaded, the API logs why and keeps running with the self-harm rules only.
+
+The model adds about 270 MB of memory to the API. On a 1 GB server, add a swap file:
+
+```bash
+sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
 
 ---
 

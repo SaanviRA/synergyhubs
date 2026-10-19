@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Send, MessageSquare } from 'lucide-react';
+import { X, Send, MessageSquare, ShieldAlert, Heart } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 const POLL_MS = 4000;
@@ -20,6 +20,10 @@ export default function WorkspaceChat({ workspace, onClose, accent = 'brand' }) 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  // The safety check asked the writer to think again before this text is posted
+  const [nudgedText, setNudgedText] = useState(null);
+  // A message suggested the writer may be struggling: show where to get help
+  const [showSupport, setShowSupport] = useState(false);
   const lastIdRef = useRef(0);
   const listRef = useRef(null);
 
@@ -72,7 +76,7 @@ export default function WorkspaceChat({ workspace, onClose, accent = 'brand' }) 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const handleSend = async () => {
+  const handleSend = async (confirmed = false) => {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
@@ -80,13 +84,18 @@ export default function WorkspaceChat({ workspace, onClose, accent = 'brand' }) 
       const res = await fetch(`${API_URL}/api/workspaces/${workspace.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, confirmed }),
       });
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.nudge) {
+        setNudgedText(text);
+        setError('');
+      } else if (res.ok) {
         addMessages([data]);
         setDraft('');
+        setNudgedText(null);
         setError('');
+        if (data.support) setShowSupport(true);
       } else {
         setError(data.error || 'Could not send the message');
       }
@@ -142,10 +151,16 @@ export default function WorkspaceChat({ workspace, onClose, accent = 'brand' }) 
                 <p
                   className={`px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words ${
                     m.mine ? `${mineBubble} text-white rounded-tr-sm` : 'bg-white border border-surface-200 text-surface-900 rounded-tl-sm'
-                  }`}
+                  } ${m.status !== 'visible' ? 'opacity-60' : ''}`}
                 >
                   {m.text}
                 </p>
+                {m.status === 'held' && (
+                  <span className="text-[11px] text-amber-700 mt-0.5">Waiting for a teacher to review. Only you can see it.</span>
+                )}
+                {m.status === 'removed' && (
+                  <span className="text-[11px] text-rose-700 mt-0.5">Removed by a teacher. Only you can see it.</span>
+                )}
               </div>
             </div>
           ))
@@ -153,11 +168,47 @@ export default function WorkspaceChat({ workspace, onClose, accent = 'brand' }) 
       </div>
 
       <div className="border-t border-surface-200 p-3 space-y-2">
+        {showSupport && (
+          <div className="flex gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+            <Heart size={16} className="shrink-0 text-sky-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold">You don't have to go through this alone.</p>
+              <p>
+                Please talk to someone you trust, like a parent, teacher or school counselor. In the US you can
+                call or text 988 any time to reach the Suicide &amp; Crisis Lifeline. If you are in danger right
+                now, call 911.
+              </p>
+              <button onClick={() => setShowSupport(false)} className="text-sky-700 font-medium underline cursor-pointer">
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+        {nudgedText !== null && (
+          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <ShieldAlert size={16} className="shrink-0 text-amber-600 mt-0.5" />
+            <div className="space-y-2">
+              <p>This message might hurt or upset someone. Do you want to change it before sending? If you send it, a teacher may review it.</p>
+              <div className="flex gap-3 font-medium">
+                <button onClick={() => setNudgedText(null)} className="text-amber-800 underline cursor-pointer">
+                  Edit message
+                </button>
+                <button onClick={() => handleSend(true)} disabled={sending} className="text-amber-800 underline cursor-pointer disabled:opacity-50">
+                  Send anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {error && <p className="text-xs text-rose-600">{error}</p>}
         <div className="flex items-end gap-2">
           <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              // A changed message is checked again when sent
+              if (nudgedText !== null && e.target.value.trim() !== nudgedText) setNudgedText(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -170,7 +221,7 @@ export default function WorkspaceChat({ workspace, onClose, accent = 'brand' }) 
             className="flex-1 resize-none bg-white border border-surface-200 rounded-lg px-3 py-2 text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
           />
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!draft.trim() || sending}
             className={`p-2.5 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${sendButton}`}
             title="Send"

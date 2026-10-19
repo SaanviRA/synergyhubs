@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Book, Users, ArrowRight } from 'lucide-react';
+import { Plus, Book, Users, ArrowRight, ShieldAlert } from 'lucide-react';
 
-export default function TeacherClassList({ onSelectClass }) {
+export default function TeacherClassList({ onSelectClass, onOpenSafety }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [classes, setClasses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [classNameInput, setClassNameInput] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Open flagged chat messages in the teacher's classes, and how many are urgent
+  const [flagCounts, setFlagCounts] = useState({ open: 0, urgent: 0 });
 
   const fetchClasses = async () => {
     try {
@@ -24,6 +26,10 @@ export default function TeacherClassList({ onSelectClass }) {
 
   useEffect(() => {
     fetchClasses();
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/safety/flags`)
+      .then(res => (res.ok ? res.json() : []))
+      .then(flags => setFlagCounts({ open: flags.length, urgent: flags.filter(f => f.action === 'escalate').length }))
+      .catch(err => console.error('Error fetching flagged messages:', err));
   }, []);
 
   const handleCreateClass = async () => {
@@ -66,6 +72,26 @@ export default function TeacherClassList({ onSelectClass }) {
           <h1 className="text-3xl sm:text-4xl font-heading font-bold text-surface-900 tracking-tight">My Classes (Teacher View)</h1>
           <p className="text-surface-600">Select a project to manage its workspace and monitor progress.</p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          onClick={onOpenSafety}
+          title="Flagged Messages"
+          className={`relative p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium border shadow-sm transition-colors active:scale-95 ${
+            flagCounts.urgent > 0
+              ? 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'
+              : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+          }`}
+        >
+          <ShieldAlert size={20} />
+          <span className="hidden sm:inline">Flagged Messages</span>
+          {flagCounts.open > 0 && (
+            <span className={`min-w-5 h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${
+              flagCounts.urgent > 0 ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'
+            }`}>
+              {flagCounts.open}
+            </span>
+          )}
+        </button>
         <button 
           onClick={() => setShowAddModal(true)}
           className="bg-brand-600 text-white p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95"
@@ -73,6 +99,7 @@ export default function TeacherClassList({ onSelectClass }) {
           <Plus size={20} />
           <span className="hidden sm:inline">Create Class</span>
         </button>
+        </div>
       </header>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">

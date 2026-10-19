@@ -190,6 +190,24 @@ ALTER TABLE workspaces DROP CONSTRAINT IF EXISTS workspaces_type_check;
 ALTER TABLE workspaces ADD CONSTRAINT workspaces_type_check
     CHECK (type IN ('drive', 'canva', 'microsoft', 'other', 'figma', 'miro', 'github'));
 
+-- 2i. Safety check for chat. Messages the check holds are seen only by their writer until the class
+--     teacher reviews them. Reviewed flags are deleted after 180 days, with messages that were removed.
+ALTER TABLE workspace_messages ADD COLUMN IF NOT EXISTS status VARCHAR(10) NOT NULL DEFAULT 'visible'
+    CHECK (status IN ('visible', 'held', 'removed'));
+CREATE TABLE IF NOT EXISTS moderation_flags (
+    id SERIAL PRIMARY KEY,
+    message_id INTEGER REFERENCES workspace_messages(id) ON DELETE CASCADE NOT NULL,
+    action VARCHAR(10) NOT NULL CHECK (action IN ('review', 'block', 'escalate')),
+    categories TEXT[] NOT NULL,
+    scores JSONB NOT NULL DEFAULT '{}',
+    model_version VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    decision VARCHAR(20) CHECK (decision IN ('approved', 'removed', 'false_positive'))
+);
+CREATE INDEX IF NOT EXISTS moderation_flags_open_idx ON moderation_flags (created_at) WHERE reviewed_at IS NULL;
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

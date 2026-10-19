@@ -76,6 +76,18 @@ async def notify(conn: asyncpg.Connection, background: BackgroundTasks, event: s
         background.add_task(_deliver, event, [row["webhook_url"] for row in rows], content)
 
 
+SAFETY_ESCALATION = "safety_escalation"
+
+
+async def notify_safety(conn: asyncpg.Connection, background: BackgroundTasks, content: str) -> None:
+    """Urgent safety alerts go to every admin's webhook, whichever events they picked."""
+    rows = await conn.fetch(
+        "SELECT w.webhook_url FROM admin_webhooks w JOIN users u ON u.id = w.user_id WHERE u.is_admin"
+    )
+    if rows:
+        background.add_task(_deliver, SAFETY_ESCALATION, [row["webhook_url"] for row in rows], content)
+
+
 def plain(text: str) -> str:
     """User-supplied text shown as typed rather than as Discord markdown."""
     return re.sub(r"([\\*_~`|>#\[\]()-])", r"\\\1", text)
@@ -100,3 +112,13 @@ def user_logged_in(user, method: str) -> str:
 
 def user_logged_out(user) -> str:
     return f"🔒 **Signed out:** {describe(user)} signed out."
+
+
+def safety_escalation(class_name: str, project_name: str, has_teacher: bool) -> str:
+    # Never the student's name or the message: Discord is outside the school's systems
+    reviewer = "the class teacher" if has_teacher else "an admin (the class has no teacher)"
+    return (
+        f"🚨 **Urgent safety alert:** a chat message in {plain(class_name)} / {plain(project_name)} "
+        f"suggests a student may be at risk of self-harm. It is held for {reviewer} to review in "
+        "Synergy Hubs now."
+    )

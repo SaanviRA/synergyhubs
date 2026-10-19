@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .db import create_pool
+from .moderation import load_moderator
 from .errors import register_error_handlers
 from .access import active_user
-from .routers import admin, auth, classes, milestones, projects, resources, team, users, workspaces
+from .routers import admin, auth, classes, milestones, projects, resources, safety, team, users, workspaces
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,6 +18,8 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     # Fails fast on a missing or weak JWT_SECRET
     app.state.pool = await create_pool(get_settings())
+    # Loaded once (about a second) and shared by every request
+    app.state.moderator = load_moderator(get_settings().moderation_model_dir)
     yield
     await app.state.pool.close()
 
@@ -38,7 +41,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     # Everything outside /api/auth requires a valid token for an approved account
-    for module in (users, classes, projects, team, milestones, resources, workspaces, admin):
+    for module in (users, classes, projects, team, milestones, resources, workspaces, safety, admin):
         app.include_router(module.router, dependencies=[Depends(active_user)])
 
     return app

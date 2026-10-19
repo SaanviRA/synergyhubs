@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Check, Trash2, Loader2, ShieldCheck, X, Bell, Send } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, Loader2, ShieldCheck, ShieldAlert, X, Bell, Send } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
@@ -12,7 +12,7 @@ const NOTIFICATION_TYPES = [
   ['user_logged_out', 'User logged out', 'Someone signs out'],
 ];
 
-export default function AdminUsers({ onBack }) {
+export default function AdminUsers({ onBack, onOpenSafety }) {
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
@@ -237,6 +237,21 @@ export default function AdminUsers({ onBack }) {
 
       <div className="bg-white rounded-2xl border border-surface-200 p-4 flex items-center justify-between gap-4">
         <div className="min-w-0">
+          <p className="font-bold text-surface-900">Flagged chat messages</p>
+          <p className="text-sm text-surface-600">
+            Admins review messages the safety check flagged in classes that have no teacher.
+          </p>
+        </div>
+        <button
+          onClick={onOpenSafety}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 cursor-pointer"
+        >
+          <ShieldAlert size={16} /> Review
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-surface-200 p-4 flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <p className="font-bold text-surface-900">Auto-approve new accounts</p>
           <p className="text-sm text-surface-600">
             When on, anyone who signs up can use the app immediately. Accounts already waiting still need your approval.
@@ -351,6 +366,10 @@ export default function AdminUsers({ onBack }) {
               </label>
             ))}
           </div>
+          <p className="text-xs text-surface-500 mt-2">
+            Urgent safety alerts (a student may be at risk of self-harm) are always sent. They never include the
+            student's name or message.
+          </p>
         </fieldset>
 
         {hookMessage && (

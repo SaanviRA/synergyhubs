@@ -13,6 +13,7 @@ import RoleSelection from './pages/RoleSelection';
 
 // Teacher components
 import TeacherClassList from './pages/TeacherClassList';
+import SafetyReview from './pages/SafetyReview';
 import TeacherProjectList from './pages/TeacherProjectList';
 import TeacherDashboard from './pages/TeacherDashboard';
 import TeacherMilestones from './pages/TeacherMilestones';
@@ -30,6 +31,8 @@ function App() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [showAccount, setShowAccount] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  // Flagged chat messages, for teachers and admins; going back returns to wherever it was opened
+  const [showSafety, setShowSafety] = useState(false);
   const [userAvatar, setUserAvatar] = useState('JD');
   const [selectedRole, setSelectedRole] = useState(() => {
     return localStorage.getItem('selectedRole') || null;
@@ -132,13 +135,17 @@ function App() {
     setSelectedRole(null);
     setShowAccount(false);
     setShowAdmin(false);
+    setShowSafety(false);
     setSelectedClass(null);
     setSelectedProject(null);
   };
 
   const renderContent = () => {
+    if (showSafety) {
+      return <SafetyReview onBack={() => setShowSafety(false)} backLabel={showAdmin ? 'Back to Manage Users' : 'Back to Classes'} />;
+    }
     if (showAccount && showAdmin) {
-      return <AdminUsers onBack={() => setShowAdmin(false)} />;
+      return <AdminUsers onBack={() => setShowAdmin(false)} onOpenSafety={() => setShowSafety(true)} />;
     }
     if (showAccount) {
       return (
@@ -152,7 +159,7 @@ function App() {
 
     if (!selectedClass) {
       if (isTeacher) {
-        return <TeacherClassList onSelectClass={(cls) => setSelectedClass(cls)} />;
+        return <TeacherClassList onSelectClass={(cls) => setSelectedClass(cls)} onOpenSafety={() => setShowSafety(true)} />;
       }
       return <ClassList onSelectClass={(cls) => setSelectedClass(cls)} />;
     }

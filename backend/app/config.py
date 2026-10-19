@@ -24,6 +24,8 @@ class Settings:
     jwt_secret: str
     google_client_id: str
     cors_origins: tuple[str, ...]
+    # Folder with the school-guard model files; unset means chat is checked with the rules only
+    moderation_model_dir: str | None
 
 
 def _validate_jwt_secret(secret: str) -> str:
@@ -55,4 +57,5 @@ def get_settings() -> Settings:
             os.environ.get("GOOGLE_CLIENT_ID") or os.environ.get("VITE_GOOGLE_CLIENT_ID", "")
         ).strip(),
         cors_origins=tuple(o.strip() for o in origins.split(",") if o.strip()),
+        moderation_model_dir=os.environ.get("MODERATION_MODEL_DIR", "").strip() or None,
     )

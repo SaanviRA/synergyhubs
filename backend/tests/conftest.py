@@ -27,6 +27,7 @@ from app.config import get_settings
 from app.db import get_conn
 from app.main import app
 from app.migrate import run_migration
+from app.moderation import RulesOnly
 from app.security import generate_token
 
 # Users seeded by schema.sql
@@ -89,6 +90,8 @@ async def client(conn):
         yield conn
 
     app.dependency_overrides[get_conn] = override_get_conn
+    # The app's startup does not run here; tests that need the model's verdicts set their own
+    app.state.moderator = RulesOnly()
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client

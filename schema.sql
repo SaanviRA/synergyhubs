@@ -1,5 +1,6 @@
 -- Drop tables if they exist to start fresh
 DROP TABLE IF EXISTS evaluation_logs CASCADE;
+DROP TABLE IF EXISTS moderation_flags CASCADE;
 DROP TABLE IF EXISTS workspace_reads CASCADE;
 DROP TABLE IF EXISTS workspace_messages CASCADE;
 DROP TABLE IF EXISTS workspaces CASCADE;
@@ -175,6 +176,8 @@ CREATE TABLE workspace_messages (
     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     author VARCHAR(100) NOT NULL,
     body TEXT NOT NULL,
+    -- 'held' messages (flagged by the safety check) and 'removed' ones are seen only by their writer
+    status VARCHAR(10) NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'held', 'removed')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX workspace_messages_workspace_id_idx ON workspace_messages (workspace_id, id);
@@ -186,6 +189,23 @@ CREATE TABLE workspace_reads (
     last_read_id INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (workspace_id, user_id)
 );
+
+-- 8d. Chat messages flagged by the school-guard check, for the class teacher to review (an admin when
+--     the class has no teacher). Reviewed flags are deleted after 180 days, together with messages
+--     that were removed; open flags stay until someone reviews them.
+CREATE TABLE moderation_flags (
+    id SERIAL PRIMARY KEY,
+    message_id INTEGER REFERENCES workspace_messages(id) ON DELETE CASCADE NOT NULL,
+    action VARCHAR(10) NOT NULL CHECK (action IN ('review', 'block', 'escalate')),
+    categories TEXT[] NOT NULL,
+    scores JSONB NOT NULL DEFAULT '{}',
+    model_version VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    decision VARCHAR(20) CHECK (decision IN ('approved', 'removed', 'false_positive'))
+);
+CREATE INDEX moderation_flags_open_idx ON moderation_flags (created_at) WHERE reviewed_at IS NULL;
 
 -- 9. EVALUATION_LOGS Table
 CREATE TABLE evaluation_logs (
