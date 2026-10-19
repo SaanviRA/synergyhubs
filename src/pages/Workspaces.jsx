@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard, MessageSquare, Pencil } from 'lucide-react';
+import { ArrowLeft, Monitor, Plus, Link as LinkIcon, Search, Trash2, LayoutDashboard, Palette, FileText, MessageSquare, Pencil } from 'lucide-react';
 import WorkspaceChat from '../components/WorkspaceChat';
 import UnreadBadge from '../components/UnreadBadge';
 import { getGoogleCredentials } from '../utils/googleDriveConfig';
@@ -9,7 +9,7 @@ export default function Workspaces({ classData, projectData, onBack, onUnreadCha
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newUrl, setNewUrl] = useState('');
-  const [newType, setNewType] = useState('figma');
+  const [newType, setNewType] = useState('drive');
   const [searchQuery, setSearchQuery] = useState('');
   const [creds] = useState(getGoogleCredentials());
   const pickerNodeRef = useRef(null);
@@ -137,7 +137,7 @@ export default function Workspaces({ classData, projectData, onBack, onUnreadCha
         await fetchWorkspaces();
         setNewUrl('');
         setNewTitle('');
-        setNewType('figma');
+        setNewType('drive');
         setShowUploadForm(false);
       }
     } catch (err) {
@@ -195,6 +195,8 @@ export default function Workspaces({ classData, projectData, onBack, onUnreadCha
     switch(type) {
       case 'figma': return <Monitor className="text-purple-500" size={24} />;
       case 'drive': return <LayoutDashboard className="text-emerald-500" size={24} />;
+      case 'canva': return <Palette className="text-cyan-500" size={24} />;
+      case 'microsoft': return <FileText className="text-sky-600" size={24} />;
       case 'miro': return <LayoutDashboard className="text-amber-500" size={24} />;
       case 'github': return <Monitor className="text-surface-800" size={24} />;
       default: return <LinkIcon className="text-brand-500" size={24} />;
@@ -246,10 +248,9 @@ export default function Workspaces({ classData, projectData, onBack, onUnreadCha
                 onChange={(e) => setNewType(e.target.value)}
                 className="bg-white border border-surface-200 rounded-lg px-3 py-2 text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50 shrink-0 cursor-pointer"
               >
-                <option value="figma">Figma</option>
                 <option value="drive">Google Drive</option>
-                <option value="miro">Miro</option>
-                <option value="github">GitHub</option>
+                <option value="canva">Canva</option>
+                <option value="microsoft">Microsoft</option>
                 <option value="other">Other</option>
               </select>
               {newType === 'drive' && (

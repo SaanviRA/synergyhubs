@@ -159,7 +159,8 @@ CREATE TABLE workspaces (
     id SERIAL PRIMARY KEY,
     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
     title VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('figma', 'drive', 'miro', 'github', 'other')),
+    -- New workspaces are drive, canva, microsoft or other; figma, miro and github are older ones
+    type VARCHAR(50) NOT NULL CHECK (type IN ('drive', 'canva', 'microsoft', 'other', 'figma', 'miro', 'github')),
     url TEXT,
     creator VARCHAR(100) NOT NULL,
     creator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

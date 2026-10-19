@@ -184,6 +184,12 @@ CREATE TABLE IF NOT EXISTS project_deletions (
     PRIMARY KEY (project_id, user_id)
 );
 
+-- 2h. Workspaces can be Canva or Microsoft links. Figma, Miro and GitHub are no longer offered
+--     but stay valid for workspaces that already use them.
+ALTER TABLE workspaces DROP CONSTRAINT IF EXISTS workspaces_type_check;
+ALTER TABLE workspaces ADD CONSTRAINT workspaces_type_check
+    CHECK (type IN ('drive', 'canva', 'microsoft', 'other', 'figma', 'miro', 'github'));
+
 -- 3. Add log_type column to evaluation_logs table
 ALTER TABLE evaluation_logs 
     ADD COLUMN IF NOT EXISTS log_type VARCHAR(50) DEFAULT 'work_log';

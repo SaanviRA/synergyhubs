@@ -7,7 +7,8 @@ from ..utils import get_initials, today_label
 
 router = APIRouter(prefix="/api", route_class=SafeRoute)
 
-WORKSPACE_TYPES = ("figma", "drive", "miro", "github", "other")
+# Platforms a new workspace can be on. Older workspaces may also be 'figma', 'miro' or 'github'.
+WORKSPACE_TYPES = ("drive", "canva", "microsoft", "other")
 
 
 class WorkspaceBody(BaseModel):

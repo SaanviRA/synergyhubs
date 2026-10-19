@@ -15,7 +15,7 @@ CASES = [
         "workspaces",
         "workspace",
         "creator",
-        {"title": "Design board", "type": "figma", "url": "https://figma.com/x"},
+        {"title": "Design board", "type": "canva", "url": "https://canva.com/x"},
     ),
 ]
 
@@ -73,10 +73,22 @@ async def test_outsider_cannot_delete_a_workspace(client, conn, outsider):
     created = (
         await client.post(
             f"/api/projects/{PROJECT}/workspaces",
-            json={"title": "Repo", "type": "github", "url": "#"},
+            json={"title": "Repo", "type": "other", "url": "#"},
             headers=auth(ALEX),
         )
     ).json()
     res = await client.delete(f"/api/workspaces/{created['id']}", headers=outsider)
     assert res.status_code == 403
     assert await conn.fetchval("SELECT COUNT(*) FROM workspaces WHERE id = $1", created["id"]) == 1
+
+
+async def test_workspaces_can_only_be_added_on_offered_platforms(client):
+    base = f"/api/projects/{PROJECT}/workspaces"
+    for platform in ("drive", "canva", "microsoft", "other"):
+        body = {"title": platform, "type": platform, "url": "https://example.com"}
+        assert (await client.post(base, json=body, headers=auth(ALEX))).status_code == 200
+
+    # No longer offered
+    for platform in ("figma", "miro", "github"):
+        res = await client.post(base, json={"title": "x", "type": platform, "url": "#"}, headers=auth(ALEX))
+        assert (res.status_code, res.json()) == (400, {"error": "Invalid workspace type"})
