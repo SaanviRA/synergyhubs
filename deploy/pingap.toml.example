@@ -1,0 +1,81 @@
+# /etc/pingap/pingap.toml - Pingap reverse proxy for the app (see DEPLOY.md, Step 6)
+# Replace every "yourdomain.com" with your domain, then check with:
+#   sudo pingap --conf=/etc/pingap/pingap.toml -t --strict
+
+[basic]
+name = "group_app"
+pid_file = "/run/pingap.pid"
+log_level = "info"
+# Keep stops and restarts inside systemd's 10 s timeout (Pingap's default grace period is 5 minutes)
+grace_period = "3s"
+graceful_shutdown_timeout = "5s"
+auto_restart_check_interval = "10s"
+
+# Let's Encrypt certificate issued by certbot (Step 5). Pingap loads it at startup;
+# the certbot deploy hook restarts Pingap after each renewal.
+[certificates.site]
+domains = "yourdomain.com"
+tls_cert = "/etc/letsencrypt/live/yourdomain.com/fullchain.pem"
+tls_key = "/etc/letsencrypt/live/yourdomain.com/privkey.pem"
+is_default = true
+
+# The FastAPI service (systemd unit group-app-api)
+[upstreams.backend]
+addrs = ["127.0.0.1:5001"]
+connection_timeout = "10s"
+read_timeout = "60s"
+write_timeout = "60s"
+
+# The compiled frontend from the live release bundle. Unknown routes get index.html (single-page app).
+[plugins.frontend]
+category = "directory"
+path = "/opt/group_app/current/dist"
+index = "index.html"
+fallback = "/index.html"
+
+# Files certbot writes to prove the domain is yours (webroot mode)
+[plugins.acmeChallenge]
+category = "directory"
+path = "/var/www/letsencrypt"
+
+[plugins.forceHttps]
+category = "redirect"
+http_to_https = true
+status = 301
+
+[locations.api]
+path = "/api"
+upstream = "backend"
+enable_reverse_proxy_headers = true
+proxy_set_headers = ["Host: $host"]
+client_max_body_size = "10mb"
+
+[locations.frontend]
+path = "/"
+plugins = ["frontend"]
+client_max_body_size = "10mb"
+
+[locations.acme]
+path = "/.well-known/acme-challenge/"
+plugins = ["acmeChallenge"]
+
+[locations.redirect]
+path = "/"
+plugins = ["forceHttps"]
+
+[servers.https]
+addr = "0.0.0.0:443"
+locations = ["api", "frontend"]
+global_certificates = true
+# The value is "tlsv1.2" (Pingap's docs say "tls1.2", which the binary rejects)
+tls_min_version = "tlsv1.2"
+tls_cipher_list = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+# HTTP/2 stays off to avoid exposure to HTTP/2 protocol CVEs; the site works over HTTP/1.1
+enabled_h2 = false
+access_log = "combined"
+
+# Port 80 only answers certbot challenges and redirects everything else to HTTPS
+[servers.http]
+addr = "0.0.0.0:80"
+locations = ["acme", "redirect"]
+access_log = "combined"

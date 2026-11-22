@@ -1,0 +1,17 @@
+# /etc/systemd/system/pingap.service - based on the unit file in the Pingap repository
+[Unit]
+Description=Pingap reverse proxy
+After=network.target nss-lookup.target
+
+[Service]
+Type=forking
+User=root
+PIDFile=/run/pingap.pid
+# Refuse to start with an invalid configuration
+ExecStartPre=/usr/local/bin/pingap --conf=/etc/pingap/pingap.toml -t
+ExecStart=/usr/local/bin/pingap --conf=/etc/pingap/pingap.toml -d --log=/var/log/pingap --autorestart
+TimeoutStopSec=10
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

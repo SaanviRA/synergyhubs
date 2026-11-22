@@ -9,16 +9,19 @@ contains everything the server runs. The server never runs `npm`, `uv`, or a bui
 ## Architecture Overview
 
 ```
-Browser ──HTTPS──> Nginx ──┬── /        static files   /opt/group_app/current/dist      (frontend)
-                           └── /api/*   proxy  ──>  127.0.0.1:5001  uvicorn + FastAPI   (systemd: group-app-api)
-                                                          │
-                                                          └──> 127.0.0.1:5432  PostgreSQL (Docker)
+Browser ──HTTPS──> Pingap ──┬── /        static files   /opt/group_app/current/dist      (frontend)
+                            └── /api/*   proxy  ──>  127.0.0.1:5001  uvicorn + FastAPI   (systemd: group-app-api)
+                                                           │
+                                                           └──> 127.0.0.1:5432  PostgreSQL (Docker)
 ```
 
-1. **Frontend**: React + Vite, compiled to static files inside the bundle and served directly by **Nginx**.
+1. **Frontend**: React + Vite, compiled to static files inside the bundle and served directly by **Pingap**.
 2. **Backend**: Python + FastAPI, run by **systemd** as the `group-app-api` service on `127.0.0.1:5001`.
 3. **Database**: **PostgreSQL 15** in a Docker container.
-4. **Proxy**: **Nginx** terminates HTTPS, serves the frontend, and forwards `/api/*` to the backend.
+4. **Proxy**: **[Pingap](https://github.com/vicanso/pingap)** (a reverse proxy built on Cloudflare's
+   open-source Pingora library) terminates HTTPS, redirects HTTP to HTTPS, serves the frontend, and
+   forwards `/api/*` to the backend. HTTP/2 is deliberately **off** to avoid exposure to HTTP/2 protocol
+   CVEs. Certbot issues and renews the Let's Encrypt certificate in webroot mode.
 
 On the server:
 
@@ -29,15 +32,17 @@ On the server:
 | `/etc/group_app/group_app.env` | Secrets and settings. Survives deployments. |
 | `/etc/systemd/system/group-app-api.service` | The API service |
 | `/usr/local/bin/group-app-deploy` | The deploy command |
+| `/etc/pingap/pingap.toml` | Proxy configuration |
+| `/etc/systemd/system/pingap.service` | The proxy service |
+| `/var/www/letsencrypt` | Certbot's challenge files, served by Pingap on port 80 |
 
 ### How the frontend is enabled
 
-There is no frontend process to start. The bundle contains the compiled site in `dist/`, and Nginx is
-pointed at `/opt/group_app/current/dist` (Step 5). Because `current` is a symlink that each deployment
-re-points, a new frontend is live the moment a deployment finishes - no Nginx reload needed. If the site
-shows the Nginx welcome page or a 404, the Nginx site from Step 5 is not enabled; if pages load but
-logging in fails, check the API (`systemctl status group-app-api`) and that the bundle was built with
-the right `VITE_API_URL`.
+There is no frontend process to start. The bundle contains the compiled site in `dist/`, and Pingap is
+pointed at `/opt/group_app/current/dist` (Step 6). Each deployment re-points the `current` symlink, so
+the new frontend is served without changing the proxy configuration. If the site does not respond at
+all, check `systemctl status pingap`; if pages load but logging in fails, check the API
+(`systemctl status group-app-api`) and that the bundle was built with the right `VITE_API_URL`.
 
 ---
 
@@ -76,7 +81,7 @@ hash-verified, and npm install scripts are disabled during the build.
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y nginx python3 curl openssl ufw
+sudo apt install -y python3 curl openssl ufw certbot
 ```
 
 Install Docker for the database:
@@ -153,38 +158,71 @@ curl http://127.0.0.1:5001/api/health       # {"status":"ok"}
 | `JWT_SECRET` | Signs login tokens. Required, at least 32 characters - the API refuses to start otherwise. Changing it logs everyone out. |
 | `GOOGLE_CLIENT_ID` | Must equal the `VITE_GOOGLE_CLIENT_ID` the bundle was built with. Google sign-in is refused when empty. |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
-| `CORS_ORIGINS` | Leave empty when Nginx serves the frontend and `/api` from the same domain (the setup in this guide). |
+| `CORS_ORIGINS` | Leave empty when Pingap serves the frontend and `/api` from the same domain (the setup in this guide). |
 | `MODERATION_MODEL_DIR` | Folder with the school-guard model for the chat safety check (see [Chat safety check](#chat-safety-check)). When empty, chat is checked with the self-harm rules only. |
 
 ---
 
-## Step 5: Enable the frontend in Nginx (first time only)
+## Step 5: Firewall and certificate (first time only)
 
-```bash
-sudo cp /opt/group_app/current/deploy/nginx.conf.example /etc/nginx/sites-available/group_app
-sudo nano /etc/nginx/sites-available/group_app        # set server_name to your domain
-sudo ln -s /etc/nginx/sites-available/group_app /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl restart nginx
-```
-
-The site configuration serves `/opt/group_app/current/dist` and proxies `/api` to `127.0.0.1:5001`.
-
----
-
-## Step 6: Firewall and HTTPS (first time only)
+Pingap only starts once a certificate exists, so get one first. Point your domain's DNS at the server,
+then:
 
 ```bash
 sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
+sudo ufw allow 80,443/tcp
 sudo ufw enable
 
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com
-sudo systemctl status certbot.timer        # automatic renewal
+# Nothing listens on port 80 yet, so certbot can answer the challenge itself this once
+sudo certbot certonly --standalone -d yourdomain.com
 ```
 
 HTTPS is required for Google sign-in (see below).
+
+---
+
+## Step 6: Install Pingap and serve the site (first time only)
+
+Install the release binary (check [the releases page](https://github.com/vicanso/pingap/releases) for
+newer versions; use `pingap-linux-musl-aarch64.tar.gz` on ARM servers):
+
+```bash
+curl -fsSLO https://github.com/vicanso/pingap/releases/download/v0.16.2/pingap-linux-musl-x86.tar.gz
+tar xzf pingap-linux-musl-x86.tar.gz
+sudo install -m 755 pingap-linux-musl-x86 /usr/local/bin/pingap
+```
+
+Configure it and start the service:
+
+```bash
+sudo install -d /etc/pingap /var/log/pingap /var/www/letsencrypt
+sudo cp /opt/group_app/current/deploy/pingap.toml.example /etc/pingap/pingap.toml
+sudo sed -i 's/yourdomain\.com/<your domain>/g' /etc/pingap/pingap.toml
+sudo pingap --conf=/etc/pingap/pingap.toml -t --strict      # validate
+
+sudo cp /opt/group_app/current/deploy/pingap.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now pingap
+```
+
+Pingap now serves `/opt/group_app/current/dist`, proxies `/api` to `127.0.0.1:5001`, and redirects
+HTTP to HTTPS. Check it from your own machine: `curl -I https://yourdomain.com/api/health`.
+
+Finally, switch certificate renewal to webroot mode, so certbot writes its challenge files to
+`/var/www/letsencrypt` for Pingap to serve instead of needing port 80 itself, and restart Pingap after
+each renewal so it loads the new certificate:
+
+```bash
+sudo certbot reconfigure --cert-name yourdomain.com --webroot --webroot-path /var/www/letsencrypt
+sudo install -m 755 /opt/group_app/current/deploy/restart-pingap.sh /etc/letsencrypt/renewal-hooks/deploy/
+sudo certbot renew --dry-run                # "all simulated renewals succeeded"
+sudo systemctl status certbot.timer         # automatic renewal
+```
+
+Dry runs skip deploy hooks, so the restart first happens at the first real renewal (about 30 days
+before expiry). Afterwards, check that the new certificate is being served (see
+[Maintenance & Logs](#maintenance--logs)). Each renewal restarts Pingap, which means a few seconds of
+downtime roughly every 60 days.
 
 ---
 
@@ -234,10 +272,51 @@ sudo systemctl restart group-app-api
 2. Keep the existing `group_app_postgres` container - skip Step 3.
 3. Run Step 4. Copy your old values into `/etc/group_app/group_app.env`. If the old `.env` had no
    `JWT_SECRET`, keep the generated one: everyone is simply asked to log in again.
-4. In `/etc/nginx/sites-available/group_app`, change `root` to `/opt/group_app/current/dist` and reload Nginx.
+4. Do [Moving from Nginx to Pingap](#moving-from-nginx-to-pingap) below, or, if the server keeps Nginx,
+   point its `root` at `/opt/group_app/current/dist` and reload Nginx.
 
 Behaviour changes to expect: requests without a login token are now rejected (previously they acted as a
 built-in demo user), and users can only reach projects in classes they belong to.
+
+---
+
+## Moving from Nginx to Pingap
+
+For a server set up with an older version of this guide (Nginx plus `certbot --nginx`). The existing
+certificate and Let's Encrypt account are kept.
+
+1. Back up first: `sudo tar czf /root/pre-pingap-backup-$(date +%F).tgz /etc/nginx /etc/letsencrypt`.
+2. Install and configure Pingap as in Step 6, up to and including the `-t --strict` check, and copy
+   `pingap.service` into `/etc/systemd/system/`, but **don't start it yet**: Nginx still holds ports 80
+   and 443. If your Nginx site sets anything not in
+   `pingap.toml` (extra locations, a different upload limit), add it now.
+3. Optionally test side by side first: run a copy of the config with `addr` changed to `0.0.0.0:8443`
+   and `0.0.0.0:8080`, and compare responses with the live site.
+4. Swap the proxies (a few seconds of downtime):
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl disable --now nginx
+   sudo systemctl enable --now pingap      # on failure: sudo systemctl enable --now nginx
+   ```
+
+5. Switch renewal to webroot and add the deploy hook (the last block of Step 6). This replaces the
+   `authenticator = nginx` / `installer = nginx` lines in `/etc/letsencrypt/renewal/<domain>.conf`,
+   which would fail now that Nginx is stopped.
+6. If `ufw` is enabled, allow the ports by number (`sudo ufw allow 80,443/tcp`), since the
+   `Nginx Full` profile goes away when Nginx is removed.
+
+One visible difference: a missing static file (such as `/assets/does-not-exist.js`) now returns 404
+instead of `index.html`.
+
+Leave Nginx installed until you are happy with Pingap. To roll back:
+
+```bash
+sudo systemctl disable --now pingap
+sudo tar xzf /root/pre-pingap-backup-<date>.tgz -C / etc/letsencrypt/renewal/<domain>.conf
+sudo rm /etc/letsencrypt/renewal-hooks/deploy/restart-pingap.sh
+sudo systemctl enable --now nginx
+```
 
 ---
 
@@ -346,8 +425,18 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
   ```bash
   sudo docker exec group_app_postgres pg_dump -U pguser group_app_db > backup-$(date +%F).sql
   ```
-* **Nginx**:
+* **Pingap (proxy)**:
   ```bash
-  sudo tail -f /var/log/nginx/error.log
-  sudo systemctl restart nginx
+  systemctl status pingap
+  sudo journalctl -u pingap; sudo ls /var/log/pingap/
+  sudo pingap --conf=/etc/pingap/pingap.toml -t      # validate after editing the config
+  sudo systemctl restart pingap
   ```
+* **Certificate**:
+  ```bash
+  sudo certbot renew --dry-run
+  echo | openssl s_client -connect yourdomain.com:443 -servername yourdomain.com 2>/dev/null | openssl x509 -noout -dates
+  ```
+  If the dates did not change after a renewal, Pingap was not restarted: run `sudo systemctl restart pingap`.
+* **API calls longer than 60 seconds** are cut off by Pingap's `read_timeout` in `[upstreams.backend]`.
+  Raise it if needed.
