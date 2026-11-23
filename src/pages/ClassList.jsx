@@ -108,7 +108,7 @@ export default function ClassList({ onSelectClass }) {
           <p className="text-surface-600">Select a project to view its workspace.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => setModalMode('create')}
             title="Create Class"
             className="bg-white text-brand-700 border border-brand-200 p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-sm hover:bg-brand-50 transition-colors active:scale-95"
@@ -116,7 +116,7 @@ export default function ClassList({ onSelectClass }) {
             <Book size={20} />
             <span className="hidden sm:inline">Create Class</span>
           </button>
-          <button 
+          <button
             onClick={() => setModalMode('join')}
             title="Join Class"
             className="bg-brand-600 text-white p-3 sm:px-4 sm:py-2.5 flex items-center gap-2 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95"
@@ -126,7 +126,7 @@ export default function ClassList({ onSelectClass }) {
           </button>
         </div>
       </header>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {classes.map((cls) => (
           <div key={cls.id} className="relative">
@@ -143,7 +143,7 @@ export default function ClassList({ onSelectClass }) {
               <h2 className="text-xl sm:text-2xl font-bold z-10 drop-shadow-sm">{cls.name}</h2>
               <p className="text-white/90 text-sm font-medium z-10">{cls.projects.length} Projects</p>
             </div>
-            
+
             {/* Bottom details area */}
             <div className="p-5 space-y-4 relative">
               <div className="flex justify-between items-center text-sm font-medium pr-8">
@@ -165,7 +165,7 @@ export default function ClassList({ onSelectClass }) {
                  </>
                 )}
               </div>
-              
+
                <div className="absolute bottom-5 right-5 text-brand-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
                 <ArrowRight size={20} />
               </div>
@@ -191,8 +191,8 @@ export default function ClassList({ onSelectClass }) {
               <h2 className="text-xl font-heading font-bold text-surface-900">
                 {modalMode === 'join' ? 'Join a Class' : 'Create a Class'}
               </h2>
-              <button 
-                onClick={handleCloseModal} 
+              <button
+                onClick={handleCloseModal}
                 className="text-surface-400 hover:text-surface-600 p-1 rounded-md hover:bg-surface-50 transition-colors"
               >
                 ✕
@@ -201,7 +201,7 @@ export default function ClassList({ onSelectClass }) {
             {modalMode === 'join' ? (
             <div className="p-6">
               <label className="block text-sm font-medium text-surface-700 mb-2">Enter Invite Code</label>
-              <input 
+              <input
                 type="text"
                 autoFocus
                 value={joinCode}
@@ -209,7 +209,7 @@ export default function ClassList({ onSelectClass }) {
                 placeholder="e.g. 8XYZ-2PLQ"
                 className="w-full uppercase bg-surface-50 border border-surface-200 rounded-xl p-3 text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 mb-6 font-mono font-medium tracking-wide"
               />
-              <button 
+              <button
                 onClick={handleJoinClass}
                 disabled={!joinCode.trim()}
                 className="w-full bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95"
@@ -220,7 +220,7 @@ export default function ClassList({ onSelectClass }) {
             ) : !generatedCode ? (
               <div className="p-6">
                 <label className="block text-sm font-medium text-surface-700 mb-2">Class Name</label>
-                <input 
+                <input
                   type="text"
                   autoFocus
                   value={classNameInput}
@@ -228,7 +228,7 @@ export default function ClassList({ onSelectClass }) {
                   placeholder="e.g. Physics Study Group"
                   className="w-full bg-surface-50 border border-surface-200 rounded-xl p-3 text-surface-900 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 mb-6 font-medium"
                 />
-                <button 
+                <button
                   onClick={handleCreateClass}
                   disabled={!classNameInput.trim() || isSubmitting}
                   className="w-full bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium shadow-md shadow-brand-500/20 hover:bg-brand-700 transition-colors active:scale-95 flex items-center justify-center gap-2"
@@ -245,7 +245,7 @@ export default function ClassList({ onSelectClass }) {
                   <h3 className="text-lg font-bold text-surface-900">Class Created!</h3>
                   <p className="text-sm text-surface-500">Share this code with classmates to let them join:</p>
                 </div>
-                
+
                 <div className="bg-surface-50 border border-surface-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2">
                   <span className="text-2xl font-bold font-mono text-brand-600 tracking-wider select-all uppercase">
                     {generatedCode}
@@ -260,8 +260,8 @@ export default function ClassList({ onSelectClass }) {
                     Copy Code
                   </button>
                 </div>
-                
-                <button 
+
+                <button
                   onClick={handleCloseModal}
                   className="w-full bg-surface-900 text-white px-6 py-3 rounded-xl font-medium shadow-md hover:bg-surface-800 transition-colors active:scale-95"
                 >

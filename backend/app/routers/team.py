@@ -114,7 +114,9 @@ async def invite_teammate(projectId: int, body: InviteBody, conn: Conn):
 
 
 # Remove a member from the team. Anyone on the project may do this, except to the owner.
-@router.delete("/team/{userId:int}", dependencies=[fails_with("Server error removing teammate"), ProjectAccess])
+@router.delete(
+    "/team/{userId:int}", dependencies=[fails_with("Server error removing teammate"), ProjectAccess]
+)
 async def remove_teammate(projectId: int, userId: int, conn: Conn):
     member = await conn.fetchrow(
         f"SELECT {IS_OWNER} AS is_owner FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = $2",

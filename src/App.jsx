@@ -163,14 +163,14 @@ function App() {
       }
       return <ClassList onSelectClass={(cls) => setSelectedClass(cls)} />;
     }
-    
+
     if (!selectedProject) {
       if (isTeacher) {
         return (
-          <TeacherProjectList 
-            classData={selectedClass} 
-            onSelectProject={(proj) => setSelectedProject(proj)} 
-            onBack={() => setSelectedClass(null)} 
+          <TeacherProjectList
+            classData={selectedClass}
+            onSelectProject={(proj) => setSelectedProject(proj)}
+            onBack={() => setSelectedClass(null)}
             onUpdateClass={(updatedClass) => setSelectedClass(updatedClass)}
           />
         );
@@ -178,8 +178,8 @@ function App() {
       // A student who created the class owns it and can add projects to it
       if (selectedClass.role === 'teacher') {
         return (
-          <TeacherProjectList 
-            classData={selectedClass} 
+          <TeacherProjectList
+            classData={selectedClass}
             isStudentOwner
             onSelectProject={(proj) => {
               // Record the visit, as the student project list does
@@ -187,17 +187,17 @@ function App() {
                 method: 'POST'
               }).catch(err => console.error('Error recording project visit:', err));
               setSelectedProject(proj);
-            }} 
-            onBack={() => setSelectedClass(null)} 
+            }}
+            onBack={() => setSelectedClass(null)}
             onUpdateClass={(updatedClass) => setSelectedClass(updatedClass)}
           />
         );
       }
       return (
-        <ProjectList 
-          classData={selectedClass} 
-          onSelectProject={(proj) => setSelectedProject(proj)} 
-          onBack={() => setSelectedClass(null)} 
+        <ProjectList
+          classData={selectedClass}
+          onSelectProject={(proj) => setSelectedProject(proj)}
+          onBack={() => setSelectedClass(null)}
           onUpdateClass={(updatedClass) => setSelectedClass(updatedClass)}
         />
       );
@@ -220,20 +220,20 @@ function App() {
       switch (activeTab) {
         case 'Dashboard':
           return (
-            <TeacherDashboard 
-              classData={selectedClass} 
-              projectData={selectedProject} 
-              onBack={() => setSelectedProject(null)} 
+            <TeacherDashboard
+              classData={selectedClass}
+              projectData={selectedProject}
+              onBack={() => setSelectedProject(null)}
               onNavigate={setActiveTab}
               onUpdateProject={handleUpdateProject}
             />
           );
         case 'Timeline':
           return (
-            <TeacherMilestones 
-              classData={selectedClass} 
-              projectData={selectedProject} 
-              onBack={() => setSelectedProject(null)} 
+            <TeacherMilestones
+              classData={selectedClass}
+              projectData={selectedProject}
+              onBack={() => setSelectedProject(null)}
               onNavigate={setActiveTab}
               onUpdateProject={handleUpdateProject}
             />
@@ -244,20 +244,20 @@ function App() {
           return <TeacherWorkspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} onUnreadChange={setWorkspaceUnread} />;
         case 'Team':
           return (
-            <TeacherTeam 
-              classData={selectedClass} 
-              projectData={selectedProject} 
-              onBack={() => setSelectedProject(null)} 
+            <TeacherTeam
+              classData={selectedClass}
+              projectData={selectedProject}
+              onBack={() => setSelectedProject(null)}
               onNavigate={setActiveTab}
               onUpdateProject={handleUpdateProject}
             />
           );
         default:
           return (
-            <TeacherDashboard 
-              classData={selectedClass} 
-              projectData={selectedProject} 
-              onBack={() => setSelectedProject(null)} 
+            <TeacherDashboard
+              classData={selectedClass}
+              projectData={selectedProject}
+              onBack={() => setSelectedProject(null)}
               onNavigate={setActiveTab}
               onUpdateProject={handleUpdateProject}
             />
@@ -268,20 +268,20 @@ function App() {
     switch (activeTab) {
       case 'Dashboard':
         return (
-          <Dashboard 
-            classData={selectedClass} 
-            projectData={selectedProject} 
-            onBack={() => setSelectedProject(null)} 
+          <Dashboard
+            classData={selectedClass}
+            projectData={selectedProject}
+            onBack={() => setSelectedProject(null)}
             onNavigate={setActiveTab}
             onUpdateProject={handleUpdateProject}
           />
         );
       case 'Timeline':
         return (
-          <Milestones 
-            classData={selectedClass} 
-            projectData={selectedProject} 
-            onBack={() => setSelectedProject(null)} 
+          <Milestones
+            classData={selectedClass}
+            projectData={selectedProject}
+            onBack={() => setSelectedProject(null)}
             onNavigate={setActiveTab}
             onUpdateProject={handleUpdateProject}
           />
@@ -292,20 +292,20 @@ function App() {
         return <Workspaces classData={selectedClass} projectData={selectedProject} onBack={() => setSelectedProject(null)} onUnreadChange={setWorkspaceUnread} />;
       case 'Team':
         return (
-          <Team 
-            classData={selectedClass} 
-            projectData={selectedProject} 
-            onBack={() => setSelectedProject(null)} 
+          <Team
+            classData={selectedClass}
+            projectData={selectedProject}
+            onBack={() => setSelectedProject(null)}
             onNavigate={setActiveTab}
             onUpdateProject={handleUpdateProject}
           />
         );
       default:
         return (
-          <Dashboard 
-            classData={selectedClass} 
-            projectData={selectedProject} 
-            onBack={() => setSelectedProject(null)} 
+          <Dashboard
+            classData={selectedClass}
+            projectData={selectedProject}
+            onBack={() => setSelectedProject(null)}
             onNavigate={setActiveTab}
             onUpdateProject={handleUpdateProject}
           />
@@ -324,16 +324,16 @@ function App() {
   if (!user) {
     if (!selectedRole) {
       return (
-        <RoleSelection 
+        <RoleSelection
           onSelectRole={(role) => {
             setSelectedRole(role);
             localStorage.setItem('selectedRole', role);
-          }} 
+          }}
         />
       );
     }
     return (
-      <Login 
+      <Login
         role={selectedRole}
         onBackToRole={() => {
           setSelectedRole(null);
@@ -346,7 +346,7 @@ function App() {
             setSelectedRole(authenticatedUser.role);
             localStorage.setItem('selectedRole', authenticatedUser.role);
           }
-        }} 
+        }}
       />
     );
   }
@@ -354,21 +354,21 @@ function App() {
   return (
     <div className="min-h-screen bg-surface-50 text-surface-900 pb-20 sm:pb-0 sm:pt-20">
       {selectedProject && !showAccount && (
-        <BottomNav 
-          activeTab={activeTab} 
-          onChange={setActiveTab} 
-          onProfileClick={() => setShowAccount(true)} 
+        <BottomNav
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          onProfileClick={() => setShowAccount(true)}
           userAvatar={userAvatar}
           badges={{ Workspaces: workspaceUnread }}
         />
       )}
-      
+
       {!showAccount && (
-        <button 
-          onClick={() => setShowAccount(true)} 
+        <button
+          onClick={() => setShowAccount(true)}
           className={`fixed top-4 right-4 h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-gradient-to-br ${
-            isTeacher 
-              ? 'from-indigo-100 to-violet-200 text-indigo-700' 
+            isTeacher
+              ? 'from-indigo-100 to-violet-200 text-indigo-700'
               : 'from-brand-100 to-indigo-200 text-brand-700'
           } font-bold border-2 border-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center z-[100] hover:scale-105 active:scale-95 cursor-pointer ${
             selectedProject ? 'sm:hidden' : ''

@@ -1,8 +1,7 @@
 import pytest
 
-from app.routers import auth as auth_router
-
 from app.access import PENDING_APPROVAL
+from app.routers import auth as auth_router
 
 from .conftest import ALEX, auth
 
@@ -78,7 +77,6 @@ async def test_same_email_can_register_once_per_role(client, conn):
     assert [r["role"] for r in roles] == ["student", "teacher"]
 
 
-
 async def test_invited_email_can_sign_up_and_keeps_the_invited_project(client, conn):
     await client.post("/api/projects/101/team/invite", json={"email": "nina@example.com"}, headers=auth(ALEX))
     invited_id = await conn.fetchval("SELECT id FROM users WHERE email = 'nina@example.com'")
@@ -92,15 +90,21 @@ async def test_invited_email_can_sign_up_and_keeps_the_invited_project(client, c
         "NN",
         False,
     )
-    assert await conn.fetchval("SELECT 1 FROM project_members WHERE project_id = 101 AND user_id = $1", invited_id)
+    assert await conn.fetchval(
+        "SELECT 1 FROM project_members WHERE project_id = 101 AND user_id = $1", invited_id
+    )
 
     # Once claimed, the email is taken like any other
     res = await client.post("/api/auth/signup", json=SIGNUP)
-    assert (res.status_code, res.json()) == (409, {"error": "An account with this email already exists as a student"})
+    assert (res.status_code, res.json()) == (
+        409,
+        {"error": "An account with this email already exists as a student"},
+    )
 
     await conn.execute("UPDATE users SET approved = TRUE WHERE id = $1", invited_id)
     res = await client.post("/api/auth/login", json={"email": "nina@example.com", "password": "password123"})
     assert res.json()["user"]["id"] == invited_id
+
 
 async def test_login_failures(client):
     await client.post("/api/auth/signup", json=SIGNUP)

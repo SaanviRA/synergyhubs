@@ -42,7 +42,9 @@ async def test_profile_school_and_academic_year(client):
     assert (res.json()["school"], res.json()["academic_year"]) == ("Greenwood High", "2026-27")
 
     # Blank: cleared
-    res = await client.put("/api/users/me", json={**profile, "school": " ", "academic_year": ""}, headers=auth(ALEX))
+    res = await client.put(
+        "/api/users/me", json={**profile, "school": " ", "academic_year": ""}, headers=auth(ALEX)
+    )
     assert (res.json()["school"], res.json()["academic_year"]) == (None, None)
 
     res = await client.put("/api/users/me", json={**profile, "academic_year": "x" * 21}, headers=auth(ALEX))
@@ -140,7 +142,9 @@ async def test_student_creates_class_and_owns_it(client, conn, outsider):
 
     # Classmates join with the code as ordinary students
     await client.post("/api/classes/join", json={"joinCode": created["joinCode"]}, headers=auth(ALEX))
-    joined = next(c for c in (await client.get("/api/classes", headers=auth(ALEX))).json() if c["id"] == created["id"])
+    joined = next(
+        c for c in (await client.get("/api/classes", headers=auth(ALEX))).json() if c["id"] == created["id"]
+    )
     assert joined["role"] == "student" and joined["members"] == 2
 
     # The owner can create projects, and is on the team alongside the classmates
