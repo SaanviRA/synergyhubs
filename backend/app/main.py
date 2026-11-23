@@ -4,11 +4,11 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .access import active_user
 from .config import get_settings
 from .db import create_pool
-from .moderation import load_moderator
 from .errors import register_error_handlers
-from .access import active_user
+from .moderation import load_moderator
 from .routers import admin, auth, classes, milestones, projects, resources, safety, team, users, workspaces
 
 logging.basicConfig(level=logging.INFO)
